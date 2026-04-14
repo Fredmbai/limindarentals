@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: NestRentals green, rounded like iOS/Android app icons -->
+  <rect width="512" height="512" rx="110" fill="#0F6E56"/>
+  <!-- House walls -->
+  <rect x="148" y="248" width="216" height="148" rx="8" fill="white"/>
+  <!-- Roof (triangle) -->
+  <polygon points="256,112 100,258 412,258" fill="white"/>
+  <!-- Door cutout -->
+  <rect x="214" y="300" width="84" height="96" rx="6" fill="#0F6E56"/>
+</svg>
