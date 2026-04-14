@@ -1,0 +1,138 @@
+version: "3.9"
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  media_files:
+  static_files:
+  letsencrypt:
+  django_logs:
+
+# ── Shared proxy header vars passed to django and celery ──────────────────────
+x-django-env: &django-env
+  env_file:
+    - ./backend/.env
+  environment:
+    # Override DB/Redis URLs to point at container service names
+    DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+    # Tell Django it's behind nginx
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Django (Gunicorn) ───────────────────────────────────────────────────────
+  django:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: lumindarentals-backend
+    restart: unless-stopped
+    <<: *django-env
+    command: >
+      gunicorn core.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 3
+        --timeout 120
+        --access-logfile /var/log/lumindarentals/gunicorn-access.log
+        --error-logfile  /var/log/lumindarentals/gunicorn-error.log
+    volumes:
+      - media_files:/app/media
+      - static_files:/app/staticfiles
+      - django_logs:/var/log/lumindarentals
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  # ── Celery worker ───────────────────────────────────────────────────────────
+  celery:
+    image: lumindarentals-backend
+    restart: unless-stopped
+    <<: *django-env
+    # Entrypoint still runs migrations (idempotent) then launches celery
+    command: >
+      celery -A core worker
+        --loglevel=info
+        --logfile=/var/log/lumindarentals/celery.log
+    volumes:
+      - media_files:/app/media
+      - django_logs:/var/log/lumindarentals
+    depends_on:
+      django:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Next.js ─────────────────────────────────────────────────────────────────
+  nextjs:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Server-side only — tells Next.js rewrites where Django lives inside Docker
+        DJANGO_URL: http://django:8000
+    image: lumindarentals-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DJANGO_URL: http://django:8000
+    depends_on:
+      - django
+    expose:
+      - "3000"
+
+  # ── Nginx (reverse proxy + SSL termination) ─────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_files:/app/staticfiles:ro
+      - media_files:/app/media:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      # Certbot webroot for ACME challenge renewal
+      - ./nginx/certbot:/var/www/certbot:ro
+    depends_on:
+      - django
+      - nextjs

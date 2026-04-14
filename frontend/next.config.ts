@@ -4,6 +4,10 @@ const DJANGO_URL = process.env.DJANGO_URL ?? "http://127.0.0.1:8000";
 const devOrigins = process.env.NGROK_HOST ? [process.env.NGROK_HOST] : [];
 
 const nextConfig: NextConfig = {
+  // Produces a self-contained .next/standalone directory for Docker deployment.
+  // The runner stage copies only that directory — no node_modules needed at runtime.
+  output: "standalone",
+
   allowedDevOrigins: devOrigins,
 
   // Prevent Next.js from redirecting "/api/foo/" → "/api/foo".
