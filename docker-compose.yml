@@ -76,7 +76,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8000"
 
   # ── Celery worker ───────────────────────────────────────────────────────────
   celery:
@@ -116,4 +116,4 @@ services:
     depends_on:
       - django
     ports:
-      - "3000:3000"
+      - "3001:3000"
