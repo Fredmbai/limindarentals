@@ -210,9 +210,14 @@ def generate_receipt_pdf(receipt) -> ContentFile:
     elements.append(Spacer(1, 4))
 
     # Payment section
-    balance_str = f"KES {int(float(payment.balance)):,}" if float(payment.balance) > 0 else "Nil"
+    balance_str  = f"KES {int(float(payment.balance)):,}" if float(payment.balance) > 0 else "Nil"
+    platform_fee = float(payment.platform_fee) if hasattr(payment, "platform_fee") else 0
+    total_charged = int(float(payment.amount_paid)) + int(platform_fee)
     elements.append(section_hdr("PAYMENT"))
-    elements.append(detail_row("Amount due",    f"KES {int(float(payment.amount_due)):,}"))
+    elements.append(detail_row("Rent amount",    f"KES {int(float(payment.amount_due)):,}"))
+    if platform_fee > 0:
+        elements.append(detail_row("Platform fee (0.3%)", f"KES {int(platform_fee):,}"))
+        elements.append(detail_row("Total charged to tenant", f"KES {total_charged:,}"))
     elements.append(detail_row("Amount paid",   f"KES {int(float(payment.amount_paid)):,}"))
     elements.append(detail_row("Balance",       balance_str))
     elements.append(detail_row("Period covered", period_str))

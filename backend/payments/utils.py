@@ -5,6 +5,23 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
 
+def calculate_platform_fee(amount: int | float | Decimal) -> int:
+    """
+    Returns the platform service fee in KES for a given rent amount.
+
+    Fee = ceil(amount × PLATFORM_FEE_PERCENTAGE / 100)
+    Rounds UP to the nearest whole shilling so we never under-collect.
+
+    The percentage is read from settings.PLATFORM_FEE_PERCENTAGE
+    (env var: PLATFORM_FEE_PERCENTAGE, default 0.3).
+
+    Only applied to M-Pesa and Paystack payments — not bank transfers.
+    """
+    from django.conf import settings
+    pct = Decimal(str(getattr(settings, "PLATFORM_FEE_PERCENTAGE", 0.3)))
+    return math.ceil(Decimal(str(amount)) * pct / Decimal("100"))
+
+
 def calculate_prorated_rent(rent_amount: Decimal, start_date: date) -> int:
     """Prorated rent = daily_rate × remaining_days_in_month. Always rounds UP."""
     days_in_month  = calendar.monthrange(start_date.year, start_date.month)[1]

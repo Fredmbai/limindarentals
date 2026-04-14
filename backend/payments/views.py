@@ -1,5 +1,6 @@
 import json
 import logging
+from decimal              import Decimal
 from django.conf          import settings
 from django.db            import transaction
 from django.shortcuts     import get_object_or_404
@@ -21,7 +22,7 @@ from .serializers  import (
     ReceiptSerializer,
     BankProofUploadSerializer,
 )
-from .utils        import generate_receipt_number, format_phone_for_mpesa
+from .utils        import generate_receipt_number, format_phone_for_mpesa, calculate_platform_fee
 from .mpesa.daraja import daraja
 from .paystack     import paystack                  # ← Paystack replaces Flutterwave
 from accounts.permissions import IsLandlordOrCaretaker, IsTenant, IsLandlord
@@ -144,9 +145,19 @@ class InitiatePaymentView(APIView):
             period_start = period["period_start"]
             period_end   = period["period_end"]
     
+        # Platform fee applies to M-Pesa and Paystack only (not bank transfer).
+        # Tenant is charged amount_due + fee; landlord receives amount_due only.
+        fee = (
+            calculate_platform_fee(amount_due)
+            if method in (Payment.Method.MPESA, Payment.Method.CARD)
+            else 0
+        )
+        charge_amount = amount_due + fee   # total billed to tenant
+
         payment = Payment.objects.create(
             tenancy      = tenancy,
             amount_due   = amount_due,
+            platform_fee = fee,
             payment_type = payment_type,
             method       = method,
             status       = Payment.Status.PENDING,
@@ -164,7 +175,7 @@ class InitiatePaymentView(APIView):
                 description = f"Rent {tenancy.unit.unit_number}"
                 result      = daraja.stk_push(
                     phone       = phone,
-                    amount      = amount_due,
+                    amount      = charge_amount,   # includes platform fee
                     payment_id  = str(payment.id),
                     description = description,
                 )
@@ -196,7 +207,7 @@ class InitiatePaymentView(APIView):
                 )
                 result = paystack.initiate_payment(
                     payment_id   = str(payment.id),
-                    amount_kes   = amount_due,
+                    amount_kes   = charge_amount,   # includes platform fee
                     email        = tenant.email or "",
                     full_name    = tenant.full_name,
                     phone        = tenant.phone,
@@ -285,9 +296,12 @@ class MpesaCallbackView(APIView):
                 mpesa_log.amount               = amount_paid
                 mpesa_log.save()
 
+                # Strip platform fee so amount_paid reflects rent only
+                # (landlord's portion — used by update_unit_payment_status)
+                rent_paid = Decimal(str(amount_paid)) - payment.platform_fee
                 payment.mark_success(
                     transaction_id=mpesa_receipt,
-                    amount_paid=amount_paid,
+                    amount_paid=max(rent_paid, Decimal("0")),
                 )
                 create_receipt(payment)
                 activate_tenancy_if_initial(payment)
@@ -352,9 +366,10 @@ class PaystackWebhookView(APIView):
         # Step 2 — verify with Paystack API (never trust webhook alone)
         verify = paystack.verify_payment(reference)
         if verify["data"]["status"] == "success":
+            rent_paid = Decimal(str(amount_paid)) - payment.platform_fee
             payment.mark_success(
                 transaction_id=tx_id,
-                amount_paid=amount_paid,
+                amount_paid=max(rent_paid, Decimal("0")),
             )
             create_receipt(payment)
             activate_tenancy_if_initial(payment)
@@ -399,10 +414,11 @@ class PaystackReturnView(APIView):
                 with db_transaction.atomic():
                     payment = Payment.objects.select_for_update().get(id=payment_id)
                     if payment.status != Payment.Status.SUCCESS:
-                        amount_paid = verify["data"]["amount"] // 100
+                        amount_paid_total = verify["data"]["amount"] // 100
+                        rent_paid = Decimal(str(amount_paid_total)) - payment.platform_fee
                         payment.mark_success(
                             transaction_id = str(verify["data"]["id"]),
-                            amount_paid    = amount_paid,
+                            amount_paid    = max(rent_paid, Decimal("0")),
                         )
                         create_receipt(payment)
                         activate_tenancy_if_initial(payment)

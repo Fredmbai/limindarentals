@@ -47,6 +47,11 @@ class Payment(models.Model):
     amount_due     = models.DecimalField(max_digits=10, decimal_places=2)
     amount_paid    = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # 0.3% platform service fee added on top of amount_due for M-Pesa / Paystack.
+    # Tenant is charged amount_due + platform_fee. Landlord receives amount_due only.
+    # Zero for bank transfers (fee not applicable).
+    platform_fee   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
     payment_type   = models.CharField(max_length=10, choices=PaymentType.choices)
     method         = models.CharField(max_length=10, choices=Method.choices)
     status         = models.CharField(

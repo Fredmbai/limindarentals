@@ -200,6 +200,11 @@ CELERY_ACCEPT_CONTENT    = ["json"]
 CELERY_TASK_SERIALIZER   = "json"
 CELERY_RESULT_SERIALIZER = "json"
 
+# ── Platform fee ─────────────────────────────────────────────────────────────
+# Added to every M-Pesa and Paystack payment on top of the rent amount.
+# Tenant pays: rent + fee. Landlord receives: rent only.
+PLATFORM_FEE_PERCENTAGE = env.float("PLATFORM_FEE_PERCENTAGE", default=0.3)
+
 # ── Web Push (VAPID) ──────────────────────────────────────────────────────────
 # Generate keys once with: python manage.py generate_vapid_keys
 # Then store them in .env — never commit the private key.

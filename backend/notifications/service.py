@@ -69,21 +69,31 @@ def notify(user, title: str, message: str, notification_type: str = "general",
 
 # ── Payment notifications ─────────────────────
 
+def _fee_note(payment) -> str:
+    """Returns a short fee breakdown string if a platform fee was charged."""
+    fee = float(getattr(payment, "platform_fee", 0) or 0)
+    if fee <= 0:
+        return ""
+    total = int(float(payment.amount_paid)) + int(fee)
+    return f" (incl. KES {int(fee):,} platform fee; total charged: KES {total:,})"
+
+
 def notify_payment_success(payment):
     """Called after any successful payment."""
     tenancy  = payment.tenancy
     tenant   = tenancy.tenant
     landlord = tenancy.landlord
 
-    amount = f"KES {int(float(payment.amount_paid)):,}"
-    unit   = tenancy.unit.unit_number
-    method = payment.get_method_display()
+    amount   = f"KES {int(float(payment.amount_paid)):,}"
+    unit     = tenancy.unit.unit_number
+    method   = payment.get_method_display()
+    fee_note = _fee_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Payment received",
-            message           = f"Your payment of {amount} for Unit {unit} via {method} was received successfully. Receipt: {getattr(payment.receipt, 'receipt_number', '')}",
+            message           = f"Your payment of {amount}{fee_note} for Unit {unit} via {method} was received successfully. Receipt: {getattr(payment.receipt, 'receipt_number', '')}",
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",
@@ -108,12 +118,13 @@ def notify_initial_payment(payment):
     landlord = tenancy.landlord
     unit     = tenancy.unit.unit_number
     amount   = f"KES {int(float(payment.amount_paid)):,}"
+    fee_note = _fee_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Tenancy activated!",
-            message           = f"Your tenancy for Unit {unit} is now active. Welcome! Initial payment of {amount} confirmed.",
+            message           = f"Your tenancy for Unit {unit} is now active. Welcome! Initial payment of {amount}{fee_note} confirmed.",
             notification_type = "tenancy",
             related_object_id = tenancy.id,
             related_object_type = "tenancy",
@@ -139,12 +150,13 @@ def notify_partial_payment(payment):
     unit     = tenancy.unit.unit_number
     paid     = f"KES {int(float(payment.amount_paid)):,}"
     balance  = f"KES {int(float(payment.balance)):,}"
+    fee_note = _fee_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Partial payment received",
-            message           = f"Payment of {paid} for Unit {unit} received. Outstanding balance: {balance}.",
+            message           = f"Payment of {paid}{fee_note} for Unit {unit} received. Outstanding balance: {balance}.",
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",
