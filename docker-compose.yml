@@ -108,7 +108,6 @@ services:
       celery -A core beat
         --loglevel=info
         --logfile=/var/log/lumidahrentals/celerybeat.log
-        --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - media_files:/app/media
       - django_logs:/var/log/lumidahrentals

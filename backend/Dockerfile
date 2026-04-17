@@ -36,7 +36,7 @@ COPY --from=builder /install /usr/local
 COPY . .
 
 # Create directories that must exist at runtime
-RUN mkdir -p /app/media /app/staticfiles /var/log/lumindarentals
+RUN mkdir -p /app/media /app/staticfiles /var/log/lumidahrentals
 
 # Entrypoint handles migrations then starts gunicorn
 COPY docker-entrypoint.sh /docker-entrypoint.sh
