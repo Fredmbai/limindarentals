@@ -5,21 +5,55 @@ from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
 
-def calculate_platform_fee(amount: int | float | Decimal) -> int:
+def calculate_platform_fee(rent_amount: int | float | Decimal) -> int:
     """
-    Returns the platform service fee in KES for a given rent amount.
-
-    Fee = ceil(amount × PLATFORM_FEE_PERCENTAGE / 100)
-    Rounds UP to the nearest whole shilling so we never under-collect.
-
-    The percentage is read from settings.PLATFORM_FEE_PERCENTAGE
-    (env var: PLATFORM_FEE_PERCENTAGE, default 0.3).
-
-    Only applied to M-Pesa and Paystack payments — not bank transfers.
+    LumidahRentals platform fee: 2% of rent, charged post-collection on M-Pesa.
+    Deducted from rent before disbursing to landlord — tenant pays full rent amount.
+    Returns the fee in whole KES (rounds up).
     """
-    from django.conf import settings
-    pct = Decimal(str(getattr(settings, "PLATFORM_FEE_PERCENTAGE", 0.3)))
-    return math.ceil(Decimal(str(amount)) * pct / Decimal("100"))
+    return math.ceil(Decimal(str(rent_amount)) * Decimal("2") / Decimal("100"))
+
+
+def calculate_b2b_fee(landlord_amount: int | float | Decimal) -> int:
+    """
+    Safaricom B2B (Business-to-Business) transfer fee for disbursing rent
+    from the platform M-Pesa account to the landlord's M-Pesa number.
+
+    Tiers (effective April 2024, Safaricom schedule):
+      KES       1 –     1,000 → KES  12
+      KES   1,001 –     5,000 → KES  32
+      KES   5,001 –    10,000 → KES  52
+      KES  10,001 –    20,000 → KES  72
+      KES  20,001 –    70,000 → KES  82
+      KES  70,001 –   150,000 → KES 102
+      KES 150,001 –   250,000 → KES 152
+
+    Deducted from the rent before disbursing to landlord, alongside the 2% fee.
+    """
+    amt = int(math.ceil(float(landlord_amount)))
+    if amt <= 1_000:
+        return 12
+    elif amt <= 5_000:
+        return 32
+    elif amt <= 10_000:
+        return 52
+    elif amt <= 20_000:
+        return 72
+    elif amt <= 70_000:
+        return 82
+    elif amt <= 150_000:
+        return 102
+    else:
+        return 152
+
+
+def calculate_card_surcharge(rent_amount: int | float | Decimal) -> int:
+    """
+    2.6% card processing surcharge added ON TOP of rent for Paystack payments.
+    Tenant pays rent + surcharge; landlord receives rent only.
+    Rounds up to the nearest whole KES.
+    """
+    return math.ceil(Decimal(str(rent_amount)) * Decimal("2.6") / Decimal("100"))
 
 
 def calculate_prorated_rent(rent_amount: Decimal, start_date: date) -> int:

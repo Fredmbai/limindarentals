@@ -91,7 +91,7 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default="postgres://postgres:postgres@localhost:5432/lumindarentals_db",
+        default="postgres://postgres:postgres@localhost:5432/lumidahrentals_db",
     )
 }
 
@@ -175,6 +175,13 @@ MPESA_SHORTCODE       = env("MPESA_SHORTCODE")
 MPESA_PASSKEY         = env("MPESA_PASSKEY")
 MPESA_CALLBACK_URL    = env("MPESA_CALLBACK_URL")   # must be a public HTTPS URL in production
 
+# ── M-Pesa B2B (Daraja) ───────────────────────────────────────────────────────
+MPESA_B2B_INITIATOR_NAME       = env("MPESA_B2B_INITIATOR_NAME",       default="")
+MPESA_B2B_SECURITY_CREDENTIAL  = env("MPESA_B2B_SECURITY_CREDENTIAL",  default="")
+MPESA_B2B_RESULT_URL           = env("MPESA_B2B_RESULT_URL",           default="")
+MPESA_B2B_QUEUE_TIMEOUT_URL    = env("MPESA_B2B_QUEUE_TIMEOUT_URL",    default="")
+ADMIN_EMAIL                    = env("ADMIN_EMAIL",                     default="")
+
 # ── Paystack ──────────────────────────────────────────────────────────────────
 PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY")
 PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY")
@@ -186,7 +193,7 @@ EMAIL_PORT          = 587
 EMAIL_USE_TLS       = True
 EMAIL_HOST_USER     = env("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")   # Gmail App Password (16 chars)
-DEFAULT_FROM_EMAIL  = env("DEFAULT_FROM_EMAIL", default=f"LumindaRentals <{env('EMAIL_HOST_USER')}>")
+DEFAULT_FROM_EMAIL  = env("DEFAULT_FROM_EMAIL", default=f"LumidahRentals <{env('EMAIL_HOST_USER')}>")
 
 # ── Africa's Talking (SMS) ────────────────────────────────────────────────────
 AT_USERNAME  = env("AT_USERNAME",  default="sandbox")
@@ -199,11 +206,6 @@ CELERY_RESULT_BACKEND    = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT    = ["json"]
 CELERY_TASK_SERIALIZER   = "json"
 CELERY_RESULT_SERIALIZER = "json"
-
-# ── Platform fee ─────────────────────────────────────────────────────────────
-# Added to every M-Pesa and Paystack payment on top of the rent amount.
-# Tenant pays: rent + fee. Landlord receives: rent only.
-PLATFORM_FEE_PERCENTAGE = env.float("PLATFORM_FEE_PERCENTAGE", default=0.3)
 
 # ── Web Push (VAPID) ──────────────────────────────────────────────────────────
 # Generate keys once with: python manage.py generate_vapid_keys

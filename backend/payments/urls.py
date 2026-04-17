@@ -5,6 +5,8 @@ from django.urls import path
 from .views import (
     InitiatePaymentView,
     MpesaCallbackView,
+    MpesaB2BResultView,
+    MpesaB2BQueueTimeoutView,
     PaystackWebhookView,
     PaystackReturnView,
     BankProofUploadView,
@@ -59,5 +61,9 @@ urlpatterns = [
 
      path("tenancy/<uuid:tenancy_id>/",          TenancyPaymentsView.as_view(),  name="tenancy-payments"),
      path("tenancy/<uuid:tenancy_id>/receipts/", TenancyReceiptsView.as_view(),  name="tenancy-receipts"),
+
+    # M-Pesa B2B disbursement callbacks — called by Safaricom
+    path("mpesa/b2b/result/",  MpesaB2BResultView.as_view(),       name="mpesa-b2b-result"),
+    path("mpesa/b2b/timeout/", MpesaB2BQueueTimeoutView.as_view(),  name="mpesa-b2b-timeout"),
 ]
 

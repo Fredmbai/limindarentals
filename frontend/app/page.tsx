@@ -41,7 +41,7 @@ export default function LandingPage() {
             <div style={{ width: 34, height: 34, background: "var(--lr-primary)", borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Home size={17} color="#fff" />
             </div>
-            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "1.05rem", color: "var(--lr-primary)", letterSpacing: "-0.02em" }}>LumindaRentals</span>
+            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "1.05rem", color: "var(--lr-primary)", letterSpacing: "-0.02em" }}>LumidahRentals</span>
           </div>
 
           {/* Nav actions */}
@@ -87,7 +87,7 @@ export default function LandingPage() {
             </h1>
 
             <p style={{ fontSize: "1.05rem", color: "var(--lr-text-muted)", lineHeight: 1.75, maxWidth: 480, marginBottom: 36 }}>
-              From M-Pesa rent collection to maintenance tracking and digital agreements — LumindaRentals gives landlords, tenants and caretakers everything they need in one place.
+              From M-Pesa rent collection to maintenance tracking and digital agreements — LumidahRentals gives landlords, tenants and caretakers everything they need in one place.
             </p>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -288,6 +288,94 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Pricing ── */}
+      <section style={{ padding: "88px 24px", background: "#fff" }}>
+        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 56 }}>
+            <h2 style={{ fontFamily: "'Sora', sans-serif", fontSize: "clamp(1.8rem, 4vw, 2.4rem)", fontWeight: 700, color: "var(--lr-text-primary)", letterSpacing: "-0.03em", marginBottom: 12 }}>
+              Simple, transparent pricing
+            </h2>
+            <p style={{ fontSize: "1rem", color: "var(--lr-text-muted)", maxWidth: 520, margin: "0 auto" }}>
+              No monthly subscriptions. You only pay when rent is collected.
+            </p>
+          </div>
+
+          {/* Two pricing columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 24, marginBottom: 48 }} className="pricing-grid">
+            {/* Landlords */}
+            <div style={{ background: "var(--lr-bg-page)", border: "1.5px solid var(--lr-border)", borderRadius: 16, padding: "32px 28px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <div style={{ width: 36, height: 36, background: "var(--lr-primary-light)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Building2 size={18} color="var(--lr-primary)" />
+                </div>
+                <h3 style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "1.05rem", color: "var(--lr-text-primary)" }}>For Landlords</h3>
+              </div>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  { text: "No monthly subscription fee",                          positive: true  },
+                  { text: "2% platform fee per successful rent collection",        positive: false },
+                  { text: "Small Safaricom B2B transfer fee (KES 12–152)",         positive: false },
+                  { text: "Full payment breakdown on every transaction",            positive: true  },
+                  { text: "Only pay when rent is collected",                        positive: true  },
+                ].map((item) => (
+                  <li key={item.text} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: item.positive ? "var(--lr-primary-light)" : "#F4F4F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: item.positive ? "var(--lr-primary)" : "#6B6B6B" }} />
+                    </span>
+                    <span style={{ fontSize: "0.875rem", color: "var(--lr-text-secondary)", lineHeight: 1.55 }}>{item.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Tenants */}
+            <div style={{ background: "var(--lr-bg-page)", border: "1.5px solid var(--lr-border)", borderRadius: 16, padding: "32px 28px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <div style={{ width: 36, height: 36, background: "var(--lr-primary-light)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Users size={18} color="var(--lr-primary)" />
+                </div>
+                <h3 style={{ fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: "1.05rem", color: "var(--lr-text-primary)" }}>For Tenants</h3>
+              </div>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  { text: "Pay via M-Pesa — no extra charges from us",             positive: true  },
+                  { text: "Pay via Card (Visa/Mastercard) — 2.6% processing fee",  positive: false },
+                  { text: "Instant payment confirmation via SMS and email",         positive: true  },
+                  { text: "Secure encrypted payments",                              positive: true  },
+                ].map((item) => (
+                  <li key={item.text} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: item.positive ? "var(--lr-primary-light)" : "#F4F4F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: item.positive ? "var(--lr-primary)" : "#6B6B6B" }} />
+                    </span>
+                    <span style={{ fontSize: "0.875rem", color: "var(--lr-text-secondary)", lineHeight: 1.55 }}>{item.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Benefits strip */}
+          <div style={{ background: "linear-gradient(135deg, #E1F5EE, #D0F0E4)", border: "1px solid rgba(15,110,86,0.15)", borderRadius: 16, padding: "28px 32px" }}>
+            <p style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: "var(--lr-primary-dark)", marginBottom: 16, textAlign: "center" }}>What you get</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }} className="benefits-grid">
+              {[
+                "Automated rent reminders reduce late payments",
+                "Payment history and receipts always available",
+                "Multiple properties, one dashboard",
+                "24/7 payment processing",
+              ].map((b) => (
+                <div key={b} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--lr-primary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#fff" }} />
+                  </span>
+                  <span style={{ fontSize: "0.82rem", color: "#085041" }}>{b}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA ── */}
       <section style={{ padding: "88px 24px", background: "#FAFAF8" }}>
         <div style={{ maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
@@ -301,7 +389,7 @@ export default function LandingPage() {
                 Ready to simplify your rental?
               </h2>
               <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.72)", lineHeight: 1.7, marginBottom: 32 }}>
-                Join thousands of landlords and tenants already using LumindaRentals.
+                Join thousands of landlords and tenants already using LumidahRentals.
               </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
                 <Link href="/register" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", color: "var(--lr-primary)", padding: "12px 24px", borderRadius: 10, fontWeight: 600, fontSize: "0.9375rem", textDecoration: "none", transition: "transform 0.15s" }} className="cta-white">
@@ -324,7 +412,7 @@ export default function LandingPage() {
             <div style={{ width: 28, height: 28, background: "var(--lr-primary)", borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Home size={14} color="#fff" />
             </div>
-            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: "var(--lr-primary)" }}>LumindaRentals</span>
+            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, fontSize: "0.9rem", color: "var(--lr-primary)" }}>LumidahRentals</span>
           </div>
 
           {/* Centre: links */}
@@ -367,6 +455,8 @@ export default function LandingPage() {
           .roles-grid   { grid-template-columns: 1fr !important; }
           .features-grid { grid-template-columns: 1fr !important; }
           .float-card   { display: none !important; }
+          .pricing-grid  { grid-template-columns: 1fr !important; }
+          .benefits-grid { grid-template-columns: 1fr !important; }
         }
         @media (min-width: 768px) and (max-width: 1023px) {
           .hero-grid    { gap: 32px !important; }

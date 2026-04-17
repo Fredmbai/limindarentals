@@ -56,7 +56,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: lumindarentals-backend
+    image: lumidahrentals-backend
     restart: unless-stopped
     <<: *django-env
     command: >
@@ -64,12 +64,12 @@ services:
         --bind 0.0.0.0:8000
         --workers 3
         --timeout 120
-        --access-logfile /var/log/lumindarentals/gunicorn-access.log
-        --error-logfile  /var/log/lumindarentals/gunicorn-error.log
+        --access-logfile /var/log/lumidahrentals/gunicorn-access.log
+        --error-logfile  /var/log/lumidahrentals/gunicorn-error.log
     volumes:
       - media_files:/app/media
       - static_files:/app/staticfiles
-      - django_logs:/var/log/lumindarentals
+      - django_logs:/var/log/lumidahrentals
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,17 +80,38 @@ services:
 
   # ── Celery worker ───────────────────────────────────────────────────────────
   celery:
-    image: lumindarentals-backend
+    image: lumidahrentals-backend
     restart: unless-stopped
     <<: *django-env
     # Entrypoint still runs migrations (idempotent) then launches celery
     command: >
       celery -A core worker
         --loglevel=info
-        --logfile=/var/log/lumindarentals/celery.log
+        --logfile=/var/log/lumidahrentals/celery.log
     volumes:
       - media_files:/app/media
-      - django_logs:/var/log/lumindarentals
+      - django_logs:/var/log/lumidahrentals
+    depends_on:
+      django:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat (scheduled tasks) ──────────────────────────────────────────
+  celerybeat:
+    image: lumidahrentals-backend
+    restart: unless-stopped
+    <<: *django-env
+    command: >
+      celery -A core beat
+        --loglevel=info
+        --logfile=/var/log/lumidahrentals/celerybeat.log
+        --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - media_files:/app/media
+      - django_logs:/var/log/lumidahrentals
     depends_on:
       django:
         condition: service_started
@@ -107,7 +128,7 @@ services:
       args:
         # Server-side only — tells Next.js rewrites where Django lives inside Docker
         DJANGO_URL: http://django:8000
-    image: lumindarentals-frontend
+    image: lumidahrentals-frontend
     restart: unless-stopped
     environment:
       NODE_ENV: production

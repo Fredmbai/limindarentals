@@ -220,7 +220,7 @@ export default function TenantPaymentsPage() {
           <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Home size={16} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumidahRentals</span>
         </div>
 
         <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -255,6 +255,22 @@ export default function TenantPaymentsPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <NotificationBell />
             <MobileProfileButton role="tenant" />
+          </div>
+        </div>
+
+        {/* Payment method info banner */}
+        <div style={{ background: "linear-gradient(135deg, #E1F5EE, #D0F0E4)", border: "1px solid rgba(15,110,86,0.2)", borderRadius: 12, padding: "14px 18px", marginBottom: 24, display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+            <Smartphone size={16} color="#fff" />
+          </div>
+          <div>
+            <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--lr-primary-dark)", marginBottom: 3 }}>
+              We recommend paying via M-Pesa for the best experience
+            </p>
+            <p style={{ fontSize: "0.76rem", color: "#085041", lineHeight: 1.55 }}>
+              M-Pesa payments are instant, secure, and have no extra charges from our platform.
+              Card payments (Visa/Mastercard) attract an additional <strong>2.6% processing fee</strong> — for example, KES 10,000 rent will cost KES 10,260 via card.
+            </p>
           </div>
         </div>
 

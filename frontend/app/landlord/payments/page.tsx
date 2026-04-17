@@ -39,7 +39,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Home size={16} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumidahRentals</span>
         </div>
         {onClose && <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}><X size={20} color="var(--lr-text-muted)" /></button>}
       </div>
@@ -225,6 +225,32 @@ function PaymentDrawer({ payment, onClose, onVerifyBank }: {
                 </p>
               </div>
             ))}
+
+            {/* Fee breakdown — shown for successful M-Pesa payments */}
+            {payment.status === "success" && payment.method === "mpesa" && (
+              <div style={{ marginTop: 16, background: "var(--lr-bg-page)", borderRadius: 10, padding: "14px 16px" }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--lr-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Fee breakdown</p>
+                {[
+                  { label: "Rent expected",        value: formatKES(payment.amount_due) },
+                  { label: "Platform fee (2%)",     value: `− ${formatKES((payment as any).platform_fee_amount || 0)}` },
+                  { label: "M-Pesa transfer fee",   value: `− ${formatKES((payment as any).b2b_fee_amount || 0)}` },
+                  { label: "Amount received",       value: formatKES(
+                      parseFloat(payment.amount_paid) -
+                      parseFloat((payment as any).platform_fee_amount || 0) -
+                      parseFloat((payment as any).b2b_fee_amount || 0)
+                    ),
+                    highlight: true,
+                  },
+                ].map((row) => (
+                  <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--lr-border)" }}>
+                    <p style={{ fontSize: "0.78rem", color: "var(--lr-text-muted)" }}>{row.label}</p>
+                    <p style={{ fontSize: "0.82rem", fontWeight: (row as any).highlight ? 700 : 500, color: (row as any).highlight ? "var(--lr-primary)" : "var(--lr-text-primary)" }}>
+                      {row.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Method icon */}
@@ -641,6 +667,13 @@ export default function LandlordPaymentsPage() {
               })}
             </>
           )}
+        </div>
+
+        {/* Fee transparency footer */}
+        <div style={{ marginTop: 16, padding: "12px 16px", background: "var(--lr-bg-page)", borderRadius: 10, border: "1px solid var(--lr-border)" }}>
+          <p style={{ fontSize: "0.76rem", color: "var(--lr-text-muted)", lineHeight: 1.6 }}>
+            Your rent amount received is after deducting the <strong>2% LumidahRentals platform fee</strong> and the <strong>Safaricom B2B transfer fee</strong> (KES 12–152 depending on amount). These are automatically calculated per transaction. Click any payment row to see the full fee breakdown.
+          </p>
         </div>
 
       </main>

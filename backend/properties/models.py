@@ -22,6 +22,14 @@ class Property(models.Model):
                   )
     name        = models.CharField(max_length=200)
     address     = models.TextField()
+    # Optional per-property B2B payout destination; falls back to landlord default
+    payment_method = models.ForeignKey(
+                      "payments.PaymentMethod",
+                      on_delete=models.SET_NULL,
+                      null=True,
+                      blank=True,
+                      related_name="properties",
+                  )
     created_at  = models.DateTimeField(auto_now_add=True)
     updated_at  = models.DateTimeField(auto_now=True)
 

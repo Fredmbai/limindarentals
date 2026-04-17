@@ -135,6 +135,104 @@ class DarajaAPI:
         response.raise_for_status()
         return response.json()
 
+    def b2b_pay_till(
+        self,
+        till_number: str,
+        amount: int,
+        originator_conversation_id: str,
+        remarks: str = "Rent disbursement",
+    ) -> dict:
+        """
+        Sends collected rent to a landlord's Till Number via M-Pesa B2B
+        BusinessBuyGoods (CommandID: BusinessBuyGoods).
+
+        Args:
+            till_number:                  landlord's till number
+            amount:                       amount in KES (after fees deducted)
+            originator_conversation_id:   our payment UUID — echoed back in result
+            remarks:                      brief description (max 100 chars)
+
+        Returns:
+            Daraja response with ConversationID and OriginatorConversationID.
+        """
+        access_token = self.get_access_token()
+        payload = {
+            "Initiator":                  settings.MPESA_B2B_INITIATOR_NAME,
+            "SecurityCredential":         settings.MPESA_B2B_SECURITY_CREDENTIAL,
+            "CommandID":                  "BusinessBuyGoods",
+            "SenderIdentifierType":       "4",   # 4 = Organisation
+            "RecieverIdentifierType":     "2",   # 2 = Till Number
+            "Amount":                     amount,
+            "PartyA":                     self.shortcode,
+            "PartyB":                     till_number,
+            "AccountReference":           originator_conversation_id[:12],
+            "Requester":                  "",
+            "Remarks":                    remarks[:100],
+            "QueueTimeOutURL":            settings.MPESA_B2B_QUEUE_TIMEOUT_URL,
+            "ResultURL":                  settings.MPESA_B2B_RESULT_URL,
+        }
+        response = requests.post(
+            f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
+            json    = payload,
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type":  "application/json",
+            },
+            timeout = 30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def b2b_pay_paybill(
+        self,
+        paybill_number: str,
+        account_reference: str,
+        amount: int,
+        originator_conversation_id: str,
+        remarks: str = "Rent disbursement",
+    ) -> dict:
+        """
+        Sends collected rent to a landlord's Paybill via M-Pesa B2B
+        BusinessPayBill (CommandID: BusinessPayBill).
+
+        Args:
+            paybill_number:               landlord's paybill business number
+            account_reference:            paybill account reference
+            amount:                       amount in KES (after fees deducted)
+            originator_conversation_id:   our payment UUID
+            remarks:                      brief description (max 100 chars)
+
+        Returns:
+            Daraja response with ConversationID and OriginatorConversationID.
+        """
+        access_token = self.get_access_token()
+        payload = {
+            "Initiator":                  settings.MPESA_B2B_INITIATOR_NAME,
+            "SecurityCredential":         settings.MPESA_B2B_SECURITY_CREDENTIAL,
+            "CommandID":                  "BusinessPayBill",
+            "SenderIdentifierType":       "4",   # 4 = Organisation
+            "RecieverIdentifierType":     "4",   # 4 = Paybill
+            "Amount":                     amount,
+            "PartyA":                     self.shortcode,
+            "PartyB":                     paybill_number,
+            "AccountReference":           account_reference[:12],
+            "Requester":                  "",
+            "Remarks":                    remarks[:100],
+            "QueueTimeOutURL":            settings.MPESA_B2B_QUEUE_TIMEOUT_URL,
+            "ResultURL":                  settings.MPESA_B2B_RESULT_URL,
+        }
+        response = requests.post(
+            f"{self.base_url}/mpesa/b2b/v1/paymentrequest",
+            json    = payload,
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type":  "application/json",
+            },
+            timeout = 30,
+        )
+        response.raise_for_status()
+        return response.json()
+
 
 # Single instance — import this everywhere
 daraja = DarajaAPI()

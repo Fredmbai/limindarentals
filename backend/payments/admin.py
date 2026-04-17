@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Payment, Receipt, MpesaTransaction
+from .models import Payment, PaymentMethod, Receipt, MpesaTransaction
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
@@ -18,3 +18,11 @@ class MpesaTransactionAdmin(admin.ModelAdmin):
     list_display    = ["mpesa_receipt_number", "phone_number", "amount", "result_code", "created_at"]
     list_filter     = ["result_code"]
     readonly_fields = ["raw_response", "created_at"]
+
+
+@admin.register(PaymentMethod)
+class PaymentMethodAdmin(admin.ModelAdmin):
+    list_display    = ["account_name", "landlord", "method_type", "account_number", "is_default", "is_active", "created_at"]
+    list_filter     = ["method_type", "is_default", "is_active"]
+    search_fields   = ["account_name", "account_number", "landlord__full_name", "landlord__phone"]
+    readonly_fields = ["id", "created_at", "updated_at"]

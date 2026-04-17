@@ -1,9 +1,9 @@
 from rest_framework import serializers
 from django.utils import timezone
-from .models import Payment, Receipt
+from .models import AutoPayment, Payment, PaymentMethod, Receipt
 from .utils import (
     calculate_prorated_rent,
-    calculate_period,  
+    calculate_period,
 )
 
 
@@ -144,6 +144,64 @@ class ReceiptSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class AutoPaymentSerializer(serializers.ModelSerializer):
+    """Read serializer for AutoPayment — never exposes card_token."""
+    tenancy_unit     = serializers.CharField(source="tenancy.unit.unit_number",   read_only=True)
+    property_name    = serializers.CharField(source="tenancy.unit.property.name", read_only=True)
+    rent_amount      = serializers.DecimalField(
+        source="tenancy.rent_snapshot", max_digits=10, decimal_places=2, read_only=True
+    )
+
+    class Meta:
+        model  = AutoPayment
+        fields = [
+            "id", "tenancy", "tenancy_unit", "property_name", "rent_amount",
+            "payment_method", "mpesa_number", "card_last_four",
+            "due_day", "status", "next_due_date", "last_triggered_at",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AutoPaymentCreateSerializer(serializers.Serializer):
+    """
+    Validates creation of a new AutoPayment subscription.
+    For CARD: card_token (Paystack auth code) + card_last_four are required.
+    For MPESA: mpesa_number defaults to tenant's phone if omitted.
+    """
+    tenancy_id     = serializers.UUIDField()
+    payment_method = serializers.ChoiceField(choices=AutoPayment.METHOD_CHOICES)
+    mpesa_number   = serializers.CharField(max_length=15, required=False, allow_blank=True)
+    card_token     = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    card_last_four = serializers.CharField(max_length=4,   required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        from tenancies.models import Tenancy
+        user = self.context["request"].user
+        try:
+            tenancy = Tenancy.objects.get(id=attrs["tenancy_id"], tenant=user, status="active")
+        except Tenancy.DoesNotExist:
+            raise serializers.ValidationError({"tenancy_id": "Active tenancy not found."})
+
+        # Block duplicate active/paused subscriptions
+        if AutoPayment.objects.filter(
+            tenancy=tenancy,
+            status__in=[AutoPayment.STATUS_ACTIVE, AutoPayment.STATUS_PAUSED],
+        ).exists():
+            raise serializers.ValidationError(
+                "An active or paused auto-payment already exists for this tenancy."
+            )
+
+        if attrs["payment_method"] == AutoPayment.METHOD_CARD:
+            if not attrs.get("card_token"):
+                raise serializers.ValidationError({"card_token": "Required for card payments."})
+            if not attrs.get("card_last_four"):
+                raise serializers.ValidationError({"card_last_four": "Required for card payments."})
+
+        attrs["tenancy"] = tenancy
+        return attrs
+
+
 class BankProofUploadSerializer(serializers.ModelSerializer):
     """
     Tenant uploads bank transfer proof.
@@ -152,3 +210,30 @@ class BankProofUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Payment
         fields = ["bank_proof"]
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    """
+    CRUD serializer for landlord payment methods (Till / Paybill).
+    `landlord` is set automatically from request.user — never from payload.
+    """
+    class Meta:
+        model  = PaymentMethod
+        fields = [
+            "id", "method_type", "account_number", "account_name",
+            "paybill_account_number", "is_active", "is_default",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        method_type = attrs.get("method_type") or (self.instance.method_type if self.instance else None)
+        if method_type == PaymentMethod.MethodType.PAYBILL:
+            paybill_acc = attrs.get("paybill_account_number", "")
+            if self.instance:
+                paybill_acc = paybill_acc or self.instance.paybill_account_number
+            if not paybill_acc:
+                raise serializers.ValidationError(
+                    {"paybill_account_number": "Required for Paybill type."}
+                )
+        return attrs

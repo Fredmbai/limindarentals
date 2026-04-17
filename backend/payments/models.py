@@ -1,6 +1,175 @@
 import uuid
 from django.db import models
 from tenancies.models import Tenancy
+from accounts.models import User
+
+
+# ──────────────────────────────────────────────
+# PAYMENT METHOD — landlord B2B payout destination
+# ──────────────────────────────────────────────
+
+class PaymentMethod(models.Model):
+    """
+    Stores a landlord's M-Pesa B2B payout destination (Till or Paybill).
+    Only one method per landlord can be is_default=True — enforced in save().
+    Properties can reference a specific method; otherwise the landlord default is used.
+    """
+
+    class MethodType(models.TextChoices):
+        TILL    = "TILL",    "Till Number"
+        PAYBILL = "PAYBILL", "Paybill"
+
+    id                     = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    landlord               = models.ForeignKey(
+                                 User,
+                                 on_delete=models.CASCADE,
+                                 related_name="payment_methods",
+                                 limit_choices_to={"role": "landlord"},
+                             )
+    method_type            = models.CharField(max_length=10, choices=MethodType.choices)
+    account_number         = models.CharField(
+                                 max_length=20,
+                                 help_text="Till number or Paybill business number",
+                             )
+    account_name           = models.CharField(max_length=100)
+    # Only used for PAYBILL — the account reference (e.g. landlord's name)
+    paybill_account_number = models.CharField(
+                                 max_length=50,
+                                 blank=True,
+                                 help_text="Account number / reference for paybill (leave blank for till)",
+                             )
+    is_active              = models.BooleanField(default=True)
+    is_default             = models.BooleanField(default=False)
+    created_at             = models.DateTimeField(auto_now_add=True)
+    updated_at             = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "payment_methods"
+        ordering = ["-is_default", "-created_at"]
+
+    def __str__(self):
+        label = f"{self.account_name} ({self.account_number})"
+        if self.is_default:
+            label += " [default]"
+        return label
+
+    def save(self, *args, **kwargs):
+        """Ensure only one default per landlord."""
+        if self.is_default:
+            # Clear any existing default for this landlord (excluding self)
+            PaymentMethod.objects.filter(
+                landlord=self.landlord,
+                is_default=True,
+            ).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
+# ──────────────────────────────────────────────
+# AUTO-PAYMENT — tenant's recurring payment subscription
+# ──────────────────────────────────────────────
+
+class AutoPayment(models.Model):
+    """
+    A tenant's standing instruction to pay rent automatically on the due date.
+
+    M-Pesa flow  : Celery Beat triggers an STK push to mpesa_number on next_due_date.
+    Card flow    : Celery Beat charges the stored card_token (Paystack auth code) on next_due_date.
+
+    Security notes:
+      - card_token  = Paystack authorization_code only — NEVER raw card numbers / CVV
+      - card_last_four = last 4 digits for display only
+    """
+
+    METHOD_MPESA  = "MPESA"
+    METHOD_CARD   = "CARD"
+    METHOD_CHOICES = [
+        (METHOD_MPESA, "M-Pesa"),
+        (METHOD_CARD,  "Card"),
+    ]
+
+    STATUS_ACTIVE    = "ACTIVE"
+    STATUS_PAUSED    = "PAUSED"
+    STATUS_CANCELLED = "CANCELLED"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE,    "Active"),
+        (STATUS_PAUSED,    "Paused"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    id                 = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant             = models.ForeignKey(
+                             User,
+                             on_delete=models.CASCADE,
+                             related_name="auto_payments",
+                             limit_choices_to={"role": "tenant"},
+                         )
+    tenancy            = models.ForeignKey(
+                             "tenancies.Tenancy",
+                             on_delete=models.CASCADE,
+                             related_name="auto_payments",
+                         )
+    payment_method     = models.CharField(max_length=5, choices=METHOD_CHOICES)
+    # M-Pesa: defaults to tenant's registered phone; tenant can override
+    mpesa_number       = models.CharField(max_length=15, blank=True)
+    # Card: Paystack authorization_code (recurring token) — never raw card data
+    card_token         = models.CharField(max_length=200, blank=True)
+    card_last_four     = models.CharField(max_length=4, blank=True)
+    # due_day mirrors tenancy.due_day at creation; updated when landlord changes it
+    due_day            = models.PositiveSmallIntegerField(default=5)
+    status             = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    next_due_date      = models.DateField()
+    last_triggered_at  = models.DateTimeField(null=True, blank=True)
+    created_at         = models.DateTimeField(auto_now_add=True)
+    updated_at         = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "auto_payments"
+        ordering = ["-created_at"]
+        # One active/paused auto-payment per tenancy
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenancy"],
+                condition=models.Q(status__in=["ACTIVE", "PAUSED"]),
+                name="unique_active_autopayment_per_tenancy",
+            )
+        ]
+
+    def __str__(self):
+        return (
+            f"AutoPay {self.get_payment_method_display()} — "
+            f"{self.tenancy} — {self.status}"
+        )
+
+    @staticmethod
+    def compute_next_due_date(due_day: int, after=None):
+        """
+        Returns the next calendar date on which due_day falls,
+        on or after `after` (defaults to today).
+        Caps at day 28 to avoid month-end edge cases.
+        """
+        import calendar
+        from django.utils import timezone
+        today     = after or timezone.now().date()
+        safe_day  = min(due_day, 28)
+        # If today's day-of-month is before or equal to due_day → this month
+        if today.day <= safe_day:
+            try:
+                return today.replace(day=safe_day)
+            except ValueError:
+                # e.g., Feb doesn't have 29–31
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                return today.replace(day=last_day)
+        else:
+            # Next month
+            if today.month == 12:
+                next_month_year  = today.year + 1
+                next_month_month = 1
+            else:
+                next_month_year  = today.year
+                next_month_month = today.month + 1
+            last_day = calendar.monthrange(next_month_year, next_month_month)[1]
+            day      = min(safe_day, last_day)
+            return today.replace(year=next_month_year, month=next_month_month, day=day)
 
 
 # ──────────────────────────────────────────────
@@ -36,6 +205,11 @@ class Payment(models.Model):
         SUCCESS = "success", "Success"
         FAILED  = "failed",  "Failed"
 
+    class DisbursementStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCESS = "success", "Success"
+        FAILED  = "failed",  "Failed"
+
     id             = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenancy        = models.ForeignKey(
                          Tenancy,
@@ -47,10 +221,23 @@ class Payment(models.Model):
     amount_due     = models.DecimalField(max_digits=10, decimal_places=2)
     amount_paid    = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-    # 0.3% platform service fee added on top of amount_due for M-Pesa / Paystack.
-    # Tenant is charged amount_due + platform_fee. Landlord receives amount_due only.
-    # Zero for bank transfers (fee not applicable).
-    platform_fee   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # ── Fee breakdown ──────────────────────────────────────────────────────────
+    # M-Pesa: platform_fee_amount = 2% of rent (deducted from collected rent
+    #         before landlord disbursement); b2b_fee_amount = Safaricom B2B tier.
+    # Card:   card_surcharge_amount = 2.6% added on top of rent; tenant pays it.
+    # Bank:   all three are 0 (no fees).
+    platform_fee_amount  = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    b2b_fee_amount       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    card_surcharge_amount= models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # ── Landlord disbursement (M-Pesa B2B) ────────────────────────────────────
+    disbursement_status    = models.CharField(
+                                 max_length=10,
+                                 choices=DisbursementStatus.choices,
+                                 null=True, blank=True,
+                             )
+    disbursement_reference = models.CharField(max_length=100, null=True, blank=True)
+    disbursed_at           = models.DateTimeField(null=True, blank=True)
 
     payment_type   = models.CharField(max_length=10, choices=PaymentType.choices)
     method         = models.CharField(max_length=10, choices=Method.choices)

@@ -62,7 +62,7 @@ def generate_receipt_pdf(receipt) -> ContentFile:
     # ══════════════════════════════════════════
     header = Table(
         [[
-            _p("<b>LumindaRentals</b>", 20, WHITE, "Helvetica-Bold"),
+            _p("<b>LumidahRentals</b>", 20, WHITE, "Helvetica-Bold"),
             _p("OFFICIAL RECEIPT", 11, NR_MINT, "Helvetica-Bold", TA_RIGHT),
         ]],
         colWidths=[INNER_W * 0.6, INNER_W * 0.4],
@@ -210,18 +210,28 @@ def generate_receipt_pdf(receipt) -> ContentFile:
     elements.append(Spacer(1, 4))
 
     # Payment section
-    balance_str  = f"KES {int(float(payment.balance)):,}" if float(payment.balance) > 0 else "Nil"
-    platform_fee = float(payment.platform_fee) if hasattr(payment, "platform_fee") else 0
-    total_charged = int(float(payment.amount_paid)) + int(platform_fee)
+    balance_str       = f"KES {int(float(payment.balance)):,}" if float(payment.balance) > 0 else "Nil"
+    platform_fee_amt  = float(getattr(payment, "platform_fee_amount",  0) or 0)
+    b2b_fee_amt       = float(getattr(payment, "b2b_fee_amount",       0) or 0)
+    card_surcharge_amt= float(getattr(payment, "card_surcharge_amount", 0) or 0)
+
     elements.append(section_hdr("PAYMENT"))
-    elements.append(detail_row("Rent amount",    f"KES {int(float(payment.amount_due)):,}"))
-    if platform_fee > 0:
-        elements.append(detail_row("Platform fee (0.3%)", f"KES {int(platform_fee):,}"))
-        elements.append(detail_row("Total charged to tenant", f"KES {total_charged:,}"))
-    elements.append(detail_row("Amount paid",   f"KES {int(float(payment.amount_paid)):,}"))
-    elements.append(detail_row("Balance",       balance_str))
+    elements.append(detail_row("Rent amount",  f"KES {int(float(payment.amount_due)):,}"))
+    if card_surcharge_amt > 0:
+        elements.append(detail_row("Card surcharge (2.6%)",      f"KES {int(card_surcharge_amt):,}"))
+        total_charged = int(float(payment.amount_due)) + int(card_surcharge_amt)
+        elements.append(detail_row("Total charged to tenant",    f"KES {total_charged:,}"))
+    if platform_fee_amt > 0:
+        elements.append(detail_row("Platform fee (2%)",          f"KES {int(platform_fee_amt):,}"))
+    if b2b_fee_amt > 0:
+        elements.append(detail_row("Safaricom B2B transfer fee", f"KES {int(b2b_fee_amt):,}"))
+    if platform_fee_amt > 0 or b2b_fee_amt > 0:
+        landlord_rcv = int(float(payment.amount_paid)) - int(platform_fee_amt) - int(b2b_fee_amt)
+        elements.append(detail_row("Amount to landlord",         f"KES {landlord_rcv:,}"))
+    elements.append(detail_row("Amount paid",    f"KES {int(float(payment.amount_paid)):,}"))
+    elements.append(detail_row("Balance",        balance_str))
     elements.append(detail_row("Period covered", period_str))
-    elements.append(detail_row("Payment date",  paid_at, last=True))
+    elements.append(detail_row("Payment date",   paid_at, last=True))
     elements.append(Spacer(1, 0.8 * cm))
 
     # ══════════════════════════════════════════
@@ -232,8 +242,8 @@ def generate_receipt_pdf(receipt) -> ContentFile:
 
     footer = Table(
         [[
-            _p("This receipt was generated automatically by LumindaRentals and is valid without a signature.", 7.5, NR_GRAY),
-            _p("LumindaRentals · Kenya", 7.5, NR_GREEN, align=TA_RIGHT),
+            _p("This receipt was generated automatically by LumidahRentals and is valid without a signature.", 7.5, NR_GRAY),
+            _p("LumidahRentals · Kenya", 7.5, NR_GREEN, align=TA_RIGHT),
         ]],
         colWidths=[INNER_W * 0.65, INNER_W * 0.35],
     )

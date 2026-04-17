@@ -49,6 +49,8 @@ class Tenancy(models.Model):
                            limit_choices_to={"role": "landlord"}
                        )
     lease_start_date = models.DateField()
+    # Day of month rent is due (1–28); landlord can override per tenancy
+    due_day          = models.PositiveSmallIntegerField(default=5)
     status           = models.CharField(
                            max_length=10,
                            choices=Status.choices,

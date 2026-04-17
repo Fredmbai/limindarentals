@@ -53,7 +53,7 @@ function Sidebar({ active, onClose }: { active: string; onClose?: () => void }) 
           <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Home size={16} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumidahRentals</span>
         </div>
         {onClose && (
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
@@ -96,7 +96,19 @@ export default function LandlordDashboard() {
   const user       = useAuthStore((s) => s.user);
   const hydrated   = useAuthStore((s) => s._hasHydrated);
   usePushNotifications();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [feeBannerDismissed, setFeeBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setFeeBannerDismissed(localStorage.getItem("lr_fee_banner_dismissed") === "1");
+    }
+  }, []);
+
+  const dismissFeeBanner = () => {
+    localStorage.setItem("lr_fee_banner_dismissed", "1");
+    setFeeBannerDismissed(true);
+  };
 
   useEffect(() => {
     if (!hydrated) return;  // wait for Zustand to finish reading from storage
@@ -183,6 +195,29 @@ export default function LandlordDashboard() {
               </span>
             </div>
             <Link href="/landlord/payments" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#BA7517", textDecoration: "none" }}>Review →</Link>
+          </div>
+        )}
+
+        {/* Platform fee transparency banner (dismissible) */}
+        {!feeBannerDismissed && (
+          <div className="animate-slide-up" style={{ background: "linear-gradient(135deg, #E1F5EE, #D0F0E4)", border: "1px solid rgba(15,110,86,0.2)", borderRadius: 12, padding: "16px 18px", marginBottom: 20, position: "relative" }}>
+            <button
+              onClick={dismissFeeBanner}
+              style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--lr-primary-dark)" }}
+              aria-label="Dismiss"
+            >
+              <X size={16} />
+            </button>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--lr-primary-dark)", marginBottom: 8 }}>
+              About platform fees
+            </p>
+            <p style={{ fontSize: "0.76rem", color: "#085041", lineHeight: 1.65, marginBottom: 8 }}>
+              LumidahRentals charges a <strong>2% platform fee</strong> on each rent collection to keep the platform running. A small <strong>Safaricom B2B transfer fee</strong> (KES 12–152 depending on amount) also applies per transaction. These fees ensure fast, secure, and automated rent collection — saving you time, reducing late payments, and giving your tenants a seamless payment experience.
+            </p>
+            <p style={{ fontSize: "0.76rem", color: "#085041", lineHeight: 1.65 }}>
+              You always know exactly what you receive before tenants pay. The full fee breakdown is visible on every payment in the{" "}
+              <Link href="/landlord/payments" style={{ color: "var(--lr-primary)", fontWeight: 600, textDecoration: "underline" }}>Payments page</Link>.
+            </p>
           </div>
         )}
 

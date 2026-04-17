@@ -42,6 +42,7 @@ class PaystackAPI:
         phone:        str,
         description:  str,
         callback_url: str,
+        channels:     list | None = None,
     ) -> dict:
         """
         Initialises a Paystack transaction.
@@ -54,7 +55,7 @@ class PaystackAPI:
         match the webhook/redirect to the right Payment record.
         """
         payload = {
-            "email":        email or f"{phone}@nestrentals.com",
+            "email":        email or f"{phone}@lumidahrentals.com",
             "amount":       amount_kes * 100,      # convert KES to kobo
             "currency":     "KES",
             "reference":    str(payment_id),       # our internal payment ID
@@ -77,6 +78,8 @@ class PaystackAPI:
                 ],
             },
         }
+        if channels:
+            payload["channels"] = channels
 
         response = requests.post(
             f"{self.BASE_URL}/transaction/initialize",
@@ -102,6 +105,48 @@ class PaystackAPI:
         """
         response = requests.get(
             f"{self.BASE_URL}/transaction/verify/{reference}",
+            headers = self.headers,
+            timeout = 30,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def charge_authorization(
+        self,
+        authorization_code: str,
+        email: str,
+        amount_kes: int,
+        reference: str,
+        metadata: dict | None = None,
+    ) -> dict:
+        """
+        Charges a previously-tokenized card using its authorization_code.
+        Used for automatic (recurring) card payments — the tenant is NOT
+        redirected anywhere; the charge happens server-side.
+
+        Args:
+            authorization_code: Paystack auth code stored as card_token
+            email:              customer email (must match original transaction)
+            amount_kes:         amount in KES (will be converted to kobo)
+            reference:          our unique reference (payment UUID)
+            metadata:           optional dict with extra info
+
+        Returns:
+            Paystack API response; check response["data"]["status"] == "success"
+        """
+        payload = {
+            "authorization_code": authorization_code,
+            "email":   email,
+            "amount":  amount_kes * 100,   # KES → kobo
+            "currency": "KES",
+            "reference": reference,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+
+        response = requests.post(
+            f"{self.BASE_URL}/transaction/charge_authorization",
+            json    = payload,
             headers = self.headers,
             timeout = 30,
         )

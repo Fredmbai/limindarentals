@@ -51,7 +51,7 @@ def notify(user, title: str, message: str, notification_type: str = "general",
 
     # 2. SMS if user has a phone number
     if send_sms_flag and user.phone:
-        send_sms(user.phone, f"LumindaRentals: {message}")
+        send_sms(user.phone, f"LumidahRentals: {message}")
 
     # 3. Web Push to all subscribed devices (fire-and-forget, never crash caller)
     try:
@@ -69,13 +69,17 @@ def notify(user, title: str, message: str, notification_type: str = "general",
 
 # ── Payment notifications ─────────────────────
 
-def _fee_note(payment) -> str:
-    """Returns a short fee breakdown string if a platform fee was charged."""
-    fee = float(getattr(payment, "platform_fee", 0) or 0)
-    if fee <= 0:
+def _landlord_note(payment) -> str:
+    """
+    Returns a short note for landlord notifications showing what they will receive
+    after platform fee (2%) and B2B transfer fee deductions (M-Pesa only).
+    """
+    platform_fee = float(getattr(payment, "platform_fee_amount", 0) or 0)
+    b2b_fee      = float(getattr(payment, "b2b_fee_amount",       0) or 0)
+    if platform_fee <= 0 and b2b_fee <= 0:
         return ""
-    total = int(float(payment.amount_paid)) + int(fee)
-    return f" (incl. KES {int(fee):,} platform fee; total charged: KES {total:,})"
+    landlord_rcv = int(float(payment.amount_paid)) - int(platform_fee) - int(b2b_fee)
+    return f" (you receive KES {landlord_rcv:,} after 2% platform fee + B2B fee)"
 
 
 def notify_payment_success(payment):
@@ -84,16 +88,16 @@ def notify_payment_success(payment):
     tenant   = tenancy.tenant
     landlord = tenancy.landlord
 
-    amount   = f"KES {int(float(payment.amount_paid)):,}"
-    unit     = tenancy.unit.unit_number
-    method   = payment.get_method_display()
-    fee_note = _fee_note(payment)
+    amount        = f"KES {int(float(payment.amount_paid)):,}"
+    unit          = tenancy.unit.unit_number
+    method        = payment.get_method_display()
+    landlord_note = _landlord_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Payment received",
-            message           = f"Your payment of {amount}{fee_note} for Unit {unit} via {method} was received successfully. Receipt: {getattr(payment.receipt, 'receipt_number', '')}",
+            message           = f"Your payment of {amount} for Unit {unit} via {method} was received successfully. Receipt: {getattr(payment.receipt, 'receipt_number', '')}",
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",
@@ -104,7 +108,7 @@ def notify_payment_success(payment):
         notify(
             user              = landlord,
             title             = f"Rent received — Unit {unit}",
-            message           = f"{tenant_name} paid {amount} for Unit {unit} via {method}.",
+            message           = f"{tenant_name} paid {amount} for Unit {unit} via {method}.{landlord_note}",
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",
@@ -118,24 +122,24 @@ def notify_initial_payment(payment):
     landlord = tenancy.landlord
     unit     = tenancy.unit.unit_number
     amount   = f"KES {int(float(payment.amount_paid)):,}"
-    fee_note = _fee_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Tenancy activated!",
-            message           = f"Your tenancy for Unit {unit} is now active. Welcome! Initial payment of {amount}{fee_note} confirmed.",
+            message           = f"Your tenancy for Unit {unit} is now active. Welcome! Initial payment of {amount} confirmed.",
             notification_type = "tenancy",
             related_object_id = tenancy.id,
             related_object_type = "tenancy",
         )
 
     if landlord:
-        tenant_name = tenant.full_name if tenant else "Tenant"
+        tenant_name   = tenant.full_name if tenant else "Tenant"
+        landlord_note = _landlord_note(payment)
         notify(
             user              = landlord,
             title             = f"New tenant activated — Unit {unit}",
-            message           = f"{tenant_name} has completed initial payment of {amount} for Unit {unit}. Tenancy is now active.",
+            message           = f"{tenant_name} has completed initial payment of {amount} for Unit {unit}. Tenancy is now active.{landlord_note}",
             notification_type = "tenancy",
             related_object_id = tenancy.id,
             related_object_type = "tenancy",
@@ -150,13 +154,12 @@ def notify_partial_payment(payment):
     unit     = tenancy.unit.unit_number
     paid     = f"KES {int(float(payment.amount_paid)):,}"
     balance  = f"KES {int(float(payment.balance)):,}"
-    fee_note = _fee_note(payment)
 
     if tenant:
         notify(
             user              = tenant,
             title             = "Partial payment received",
-            message           = f"Payment of {paid}{fee_note} for Unit {unit} received. Outstanding balance: {balance}.",
+            message           = f"Payment of {paid} for Unit {unit} received. Outstanding balance: {balance}.",
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",
@@ -199,6 +202,31 @@ def notify_custom_payment(payment, period_label: str, paid_until_date):
             user              = landlord,
             title             = f"Custom payment — Unit {unit}",
             message           = f"{tenant_name} paid {period_label} rent ({amount}) for Unit {unit}. Covered until {until}.",
+            notification_type = "payment",
+            related_object_id = payment.id,
+            related_object_type = "payment",
+        )
+
+
+def notify_disbursement_failed_no_method(payment):
+    """
+    Called when B2B disbursement cannot proceed because the landlord has no
+    payment method configured. Notifies both the landlord and admin.
+    """
+    tenancy  = payment.tenancy
+    landlord = tenancy.landlord
+    unit     = tenancy.unit.unit_number
+    amount   = f"KES {int(float(payment.amount_paid)):,}"
+
+    if landlord:
+        notify(
+            user              = landlord,
+            title             = "Action required: add payout method",
+            message           = (
+                f"We received {amount} for Unit {unit} but could not disburse it "
+                f"because you have no M-Pesa payout method configured. "
+                f"Please add a Till number or Paybill in your account settings."
+            ),
             notification_type = "payment",
             related_object_id = payment.id,
             related_object_type = "payment",

@@ -15,14 +15,20 @@ from rest_framework.permissions  import IsAuthenticated, AllowAny
 
 logger = logging.getLogger(__name__)
 
-from .models       import Payment, Receipt, MpesaTransaction
+from .models       import AutoPayment, Payment, PaymentMethod, Receipt, MpesaTransaction
 from .serializers  import (
+    AutoPaymentSerializer,
+    AutoPaymentCreateSerializer,
     InitiatePaymentSerializer,
     PaymentSerializer,
+    PaymentMethodSerializer,
     ReceiptSerializer,
     BankProofUploadSerializer,
 )
-from .utils        import generate_receipt_number, format_phone_for_mpesa, calculate_platform_fee
+from .utils        import (
+    generate_receipt_number, format_phone_for_mpesa,
+    calculate_platform_fee, calculate_b2b_fee, calculate_card_surcharge,
+)
 from .mpesa.daraja import daraja
 from .paystack     import paystack                  # ← Paystack replaces Flutterwave
 from accounts.permissions import IsLandlordOrCaretaker, IsTenant, IsLandlord
@@ -145,24 +151,26 @@ class InitiatePaymentView(APIView):
             period_start = period["period_start"]
             period_end   = period["period_end"]
     
-        # Platform fee applies to M-Pesa and Paystack only (not bank transfer).
-        # Tenant is charged amount_due + fee; landlord receives amount_due only.
-        fee = (
-            calculate_platform_fee(amount_due)
-            if method in (Payment.Method.MPESA, Payment.Method.CARD)
+        # Card payments carry a 2.6% surcharge billed to the tenant.
+        # M-Pesa: tenant pays full rent; platform fee (2%) + B2B fee are
+        # deducted from the collected amount before disbursing to landlord.
+        # Bank transfers: no surcharge.
+        card_surcharge = (
+            calculate_card_surcharge(amount_due)
+            if method == Payment.Method.CARD
             else 0
         )
-        charge_amount = amount_due + fee   # total billed to tenant
+        charge_amount = amount_due + card_surcharge   # total billed to tenant
 
         payment = Payment.objects.create(
-            tenancy      = tenancy,
-            amount_due   = amount_due,
-            platform_fee = fee,
-            payment_type = payment_type,
-            method       = method,
-            status       = Payment.Status.PENDING,
-            period_start = period_start,
-            period_end   = period_end,
+            tenancy               = tenancy,
+            amount_due            = amount_due,
+            card_surcharge_amount = card_surcharge,
+            payment_type          = payment_type,
+            method                = method,
+            status                = Payment.Status.PENDING,
+            period_start          = period_start,
+            period_end            = period_end,
         )
 
         # ── M-Pesa ────────────────────────────
@@ -207,12 +215,13 @@ class InitiatePaymentView(APIView):
                 )
                 result = paystack.initiate_payment(
                     payment_id   = str(payment.id),
-                    amount_kes   = charge_amount,   # includes platform fee
+                    amount_kes   = charge_amount,   # rent + 2.6% card surcharge
                     email        = tenant.email or "",
                     full_name    = tenant.full_name,
                     phone        = tenant.phone,
                     description  = f"Rent - Unit {tenancy.unit.unit_number}",
                     callback_url = callback_url,
+                    channels     = ["card"],         # block M-Pesa via Paystack
                 )
                 auth_url = result["data"]["authorization_url"]
                 return Response({
@@ -296,15 +305,40 @@ class MpesaCallbackView(APIView):
                 mpesa_log.amount               = amount_paid
                 mpesa_log.save()
 
-                # Strip platform fee so amount_paid reflects rent only
-                # (landlord's portion — used by update_unit_payment_status)
-                rent_paid = Decimal(str(amount_paid)) - payment.platform_fee
+                # amount_paid is the full rent collected from the tenant.
+                # Calculate fees that will be deducted before disbursing to landlord.
+                collected        = Decimal(str(amount_paid))
+                platform_fee_amt = Decimal(str(calculate_platform_fee(collected)))
+                landlord_before_b2b = collected - platform_fee_amt
+                b2b_fee_amt      = Decimal(str(calculate_b2b_fee(landlord_before_b2b)))
+                landlord_amount  = max(landlord_before_b2b - b2b_fee_amt, Decimal("0"))
+
+                # Store fee breakdown and mark disbursement as pending
+                payment.platform_fee_amount  = platform_fee_amt
+                payment.b2b_fee_amount       = b2b_fee_amt
+                payment.disbursement_status  = Payment.DisbursementStatus.PENDING
+                payment.save(update_fields=[
+                    "platform_fee_amount", "b2b_fee_amount",
+                    "disbursement_status", "updated_at",
+                ])
+
+                # amount_paid = full rent collected (before fee deductions).
+                # The fee fields show how much the landlord will actually receive.
                 payment.mark_success(
                     transaction_id=mpesa_receipt,
-                    amount_paid=max(rent_paid, Decimal("0")),
+                    amount_paid=collected,
                 )
                 create_receipt(payment)
                 activate_tenancy_if_initial(payment)
+
+                # Trigger B2B disbursement to landlord
+                from .tasks import initiate_b2b_disbursement, advance_autopay_due_date
+                initiate_b2b_disbursement.apply_async(
+                    args=[str(payment.id), int(landlord_amount)],
+                    countdown=5,   # short delay to let the DB commit propagate
+                )
+                # If this was an auto-payment STK push, advance next_due_date
+                advance_autopay_due_date.delay(str(payment.tenancy_id))
 
             else:
                 # Cancelled or failed
@@ -366,7 +400,8 @@ class PaystackWebhookView(APIView):
         # Step 2 — verify with Paystack API (never trust webhook alone)
         verify = paystack.verify_payment(reference)
         if verify["data"]["status"] == "success":
-            rent_paid = Decimal(str(amount_paid)) - payment.platform_fee
+            # Strip the 2.6% card surcharge — amount_paid = rent only
+            rent_paid = Decimal(str(amount_paid)) - payment.card_surcharge_amount
             payment.mark_success(
                 transaction_id=tx_id,
                 amount_paid=max(rent_paid, Decimal("0")),
@@ -415,7 +450,8 @@ class PaystackReturnView(APIView):
                     payment = Payment.objects.select_for_update().get(id=payment_id)
                     if payment.status != Payment.Status.SUCCESS:
                         amount_paid_total = verify["data"]["amount"] // 100
-                        rent_paid = Decimal(str(amount_paid_total)) - payment.platform_fee
+                        # Strip the 2.6% card surcharge — credit landlord rent only
+                        rent_paid = Decimal(str(amount_paid_total)) - payment.card_surcharge_amount
                         payment.mark_success(
                             transaction_id = str(verify["data"]["id"]),
                             amount_paid    = max(rent_paid, Decimal("0")),
@@ -635,3 +671,334 @@ class ReceiptDownloadView(generics.RetrieveAPIView):
             id                       = self.kwargs["pk"],
             payment__tenancy__tenant = self.request.user,
         )
+
+
+# ──────────────────────────────────────────────
+# PAYMENT METHODS (landlord B2B payout destinations)
+# ──────────────────────────────────────────────
+
+class PaymentMethodListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/landlord/payment-methods/ — list the landlord's payment methods
+    POST /api/landlord/payment-methods/ — add a new payment method
+    """
+    serializer_class   = PaymentMethodSerializer
+    permission_classes = [IsLandlord]
+
+    def get_queryset(self):
+        return PaymentMethod.objects.filter(landlord=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(landlord=self.request.user)
+
+
+class PaymentMethodDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET    /api/landlord/payment-methods/:id/ — retrieve
+    PUT    /api/landlord/payment-methods/:id/ — full update
+    PATCH  /api/landlord/payment-methods/:id/ — partial update
+    DELETE /api/landlord/payment-methods/:id/ — delete
+    """
+    serializer_class   = PaymentMethodSerializer
+    permission_classes = [IsLandlord]
+
+    def get_object(self):
+        return get_object_or_404(
+            PaymentMethod,
+            id       = self.kwargs["pk"],
+            landlord = self.request.user,
+        )
+
+
+class PaymentMethodSetDefaultView(APIView):
+    """
+    PATCH /api/landlord/payment-methods/:id/set-default/
+    Marks the given method as default; clears all others for this landlord.
+    """
+    permission_classes = [IsLandlord]
+
+    def patch(self, request, pk):
+        method = get_object_or_404(
+            PaymentMethod,
+            id       = pk,
+            landlord = request.user,
+        )
+        method.is_default = True
+        method.save()   # PaymentMethod.save() handles clearing other defaults
+        return Response(
+            PaymentMethodSerializer(method).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+# ──────────────────────────────────────────────
+# B2B DISBURSEMENT CALLBACKS — called by Safaricom
+# ──────────────────────────────────────────────
+
+@method_decorator(csrf_exempt, name="dispatch")
+class MpesaB2BResultView(APIView):
+    """
+    POST /api/payments/mpesa/b2b/result/
+    Safaricom sends the B2B transfer result here.
+    """
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            data   = request.data
+            result = data.get("Result", {})
+            result_code = result.get("ResultCode")
+            conv_id     = result.get("ConversationID", "")
+            orig_conv_id = result.get("OriginatorConversationID", "")
+
+            # Match by disbursement_reference (we stored ConversationID there)
+            payment = Payment.objects.select_for_update().filter(
+                disbursement_reference=orig_conv_id
+            ).first()
+
+            if not payment:
+                # Try ConversationID in case OriginatorConversationID is empty
+                payment = Payment.objects.select_for_update().filter(
+                    disbursement_reference=conv_id
+                ).first()
+
+            if payment:
+                if result_code == 0:
+                    payment.disbursement_status = Payment.DisbursementStatus.SUCCESS
+                    payment.disbursed_at        = timezone.now()
+                    payment.save(update_fields=[
+                        "disbursement_status", "disbursed_at", "updated_at"
+                    ])
+                else:
+                    payment.disbursement_status = Payment.DisbursementStatus.FAILED
+                    payment.save(update_fields=["disbursement_status", "updated_at"])
+                    # Schedule retry via Celery
+                    from .tasks import retry_b2b_disbursement
+                    retry_b2b_disbursement.apply_async(
+                        args=[str(payment.id)],
+                        countdown=300,  # 5 minutes
+                    )
+
+        except Exception:
+            logger.exception("B2B result callback processing error")
+
+        return Response({"ResultCode": 0, "ResultDesc": "Accepted"})   # B2B result end
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class MpesaB2BQueueTimeoutView(APIView):
+    """
+    POST /api/payments/mpesa/b2b/timeout/
+    Safaricom calls this when the B2B request times out in the queue.
+    We treat it the same as a failure — schedule a retry.
+    """
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            data   = request.data
+            result = data.get("Result", {})
+            orig_conv_id = result.get("OriginatorConversationID", "")
+            conv_id      = result.get("ConversationID", "")
+
+            payment = Payment.objects.select_for_update().filter(
+                disbursement_reference=orig_conv_id
+            ).first() or Payment.objects.select_for_update().filter(
+                disbursement_reference=conv_id
+            ).first()
+
+            if payment and payment.disbursement_status == Payment.DisbursementStatus.PENDING:
+                payment.disbursement_status = Payment.DisbursementStatus.FAILED
+                payment.save(update_fields=["disbursement_status", "updated_at"])
+                from .tasks import retry_b2b_disbursement
+                retry_b2b_disbursement.apply_async(
+                    args=[str(payment.id)],
+                    countdown=300,
+                )
+
+        except Exception:
+            logger.exception("B2B queue timeout callback processing error")
+
+        return Response({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+# ──────────────────────────────────────────────
+# AUTO-PAYMENT — tenant recurring subscription
+# ──────────────────────────────────────────────
+
+class AutoPaymentListCreateView(APIView):
+    """
+    GET  /api/tenant/auto-payments/ — list tenant's auto-payment subscriptions
+    POST /api/tenant/auto-payments/ — subscribe to automatic rent payments
+    """
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        qs = AutoPayment.objects.filter(
+            tenant=request.user,
+        ).select_related("tenancy", "tenancy__unit", "tenancy__unit__property")
+        return Response(AutoPaymentSerializer(qs, many=True).data)
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = AutoPaymentCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        data    = serializer.validated_data
+        tenancy = data["tenancy"]
+
+        mpesa_number = (
+            data.get("mpesa_number")
+            or request.user.phone
+            or ""
+        )
+
+        ap = AutoPayment.objects.create(
+            tenant         = request.user,
+            tenancy        = tenancy,
+            payment_method = data["payment_method"],
+            mpesa_number   = mpesa_number if data["payment_method"] == AutoPayment.METHOD_MPESA else "",
+            card_token     = data.get("card_token", "") if data["payment_method"] == AutoPayment.METHOD_CARD else "",
+            card_last_four = data.get("card_last_four", "") if data["payment_method"] == AutoPayment.METHOD_CARD else "",
+            due_day        = tenancy.due_day,
+            next_due_date  = AutoPayment.compute_next_due_date(tenancy.due_day),
+        )
+        return Response(AutoPaymentSerializer(ap).data, status=status.HTTP_201_CREATED)
+
+
+class AutoPaymentPauseView(APIView):
+    permission_classes = [IsTenant]
+
+    def patch(self, request, pk):
+        ap = get_object_or_404(AutoPayment, id=pk, tenant=request.user)
+        if ap.status != AutoPayment.STATUS_ACTIVE:
+            return Response(
+                {"detail": "Only active auto-payments can be paused."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ap.status = AutoPayment.STATUS_PAUSED
+        ap.save(update_fields=["status", "updated_at"])
+        return Response(AutoPaymentSerializer(ap).data)
+
+
+class AutoPaymentCancelView(APIView):
+    permission_classes = [IsTenant]
+
+    def patch(self, request, pk):
+        ap = get_object_or_404(AutoPayment, id=pk, tenant=request.user)
+        if ap.status == AutoPayment.STATUS_CANCELLED:
+            return Response(
+                {"detail": "Already cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ap.status = AutoPayment.STATUS_CANCELLED
+        ap.save(update_fields=["status", "updated_at"])
+        return Response(AutoPaymentSerializer(ap).data)
+
+
+class AutoPaymentResumeView(APIView):
+    permission_classes = [IsTenant]
+
+    def patch(self, request, pk):
+        ap = get_object_or_404(AutoPayment, id=pk, tenant=request.user)
+        if ap.status != AutoPayment.STATUS_PAUSED:
+            return Response(
+                {"detail": "Only paused auto-payments can be resumed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ap.status         = AutoPayment.STATUS_ACTIVE
+        ap.next_due_date  = AutoPayment.compute_next_due_date(ap.due_day)
+        ap.save(update_fields=["status", "next_due_date", "updated_at"])
+        return Response(AutoPaymentSerializer(ap).data)
+
+
+class AutoPaymentUpdateMpesaView(APIView):
+    permission_classes = [IsTenant]
+
+    def patch(self, request, pk):
+        ap     = get_object_or_404(AutoPayment, id=pk, tenant=request.user)
+        number = request.data.get("mpesa_number", "").strip()
+        if not number:
+            return Response(
+                {"detail": "mpesa_number is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ap.payment_method != AutoPayment.METHOD_MPESA:
+            return Response(
+                {"detail": "This auto-payment uses a card, not M-Pesa."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ap.mpesa_number = number
+        ap.save(update_fields=["mpesa_number", "updated_at"])
+        return Response(AutoPaymentSerializer(ap).data)
+
+
+class AutoPaymentUpdateCardView(APIView):
+    permission_classes = [IsTenant]
+
+    def patch(self, request, pk):
+        ap             = get_object_or_404(AutoPayment, id=pk, tenant=request.user)
+        card_token     = request.data.get("card_token", "").strip()
+        card_last_four = request.data.get("card_last_four", "").strip()
+        if not card_token or not card_last_four:
+            return Response(
+                {"detail": "card_token and card_last_four are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ap.payment_method != AutoPayment.METHOD_CARD:
+            return Response(
+                {"detail": "This auto-payment uses M-Pesa, not a card."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ap.card_token     = card_token
+        ap.card_last_four = card_last_four
+        ap.save(update_fields=["card_token", "card_last_four", "updated_at"])
+        return Response(AutoPaymentSerializer(ap).data)
+
+
+# ──────────────────────────────────────────────
+# DUE DAY — landlord sets per-tenancy
+# ──────────────────────────────────────────────
+
+class TenancyDueDayView(APIView):
+    """
+    PATCH /api/landlord/tenancies/:tenancy_id/due-day/
+    Landlord updates the rent due day for a tenancy (1–28).
+    Propagates to all active/paused AutoPayment records for that tenancy.
+    """
+    permission_classes = [IsLandlord]
+
+    def patch(self, request, tenancy_id):
+        from tenancies.models import Tenancy
+        tenancy = get_object_or_404(Tenancy, id=tenancy_id, landlord=request.user)
+        due_day = request.data.get("due_day")
+        try:
+            due_day = int(due_day)
+            if not (1 <= due_day <= 28):
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "due_day must be an integer between 1 and 28."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        tenancy.due_day = due_day
+        tenancy.save(update_fields=["due_day", "updated_at"])
+
+        # Update all active/paused AutoPayments for this tenancy
+        updated = AutoPayment.objects.filter(
+            tenancy=tenancy,
+            status__in=[AutoPayment.STATUS_ACTIVE, AutoPayment.STATUS_PAUSED],
+        )
+        for ap in updated:
+            ap.due_day       = due_day
+            ap.next_due_date = AutoPayment.compute_next_due_date(due_day)
+            ap.save(update_fields=["due_day", "next_due_date", "updated_at"])
+
+        return Response({
+            "detail": f"Due day updated to {due_day} for {updated.count()} auto-payment(s).",
+            "due_day": due_day,
+        })
