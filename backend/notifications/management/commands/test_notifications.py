@@ -60,7 +60,7 @@ class Command(BaseCommand):
         self.stdout.write(f"AT_SENDER_ID: {settings.AT_SENDER_ID}")
         self.stdout.write(f"Sending to  : {phone}")
 
-        result = send_sms(phone, "LumindaRentals: This is a test SMS from your notification system. It is working correctly!")
+        result = send_sms(phone, "LumidahRentals: This is a test SMS from your notification system. It is working correctly!")
 
         if result:
             self.stdout.write(self.style.SUCCESS(f"SMS sent successfully to {phone}"))

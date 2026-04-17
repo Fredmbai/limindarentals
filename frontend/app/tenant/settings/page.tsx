@@ -47,12 +47,12 @@ Signed At:     ${agr?.signed_at ? formatDate(agr.signed_at) : "—"}
 Terms:
 1. Monthly rent payable in advance on due date each month.
 2. Security deposit refundable upon exit in good condition.
-3. Payments via LumindaRentals platform (M-Pesa, card, or bank transfer).
+3. Payments via LumidahRentals platform (M-Pesa, card, or bank transfer).
 4. 30 days written notice required for termination by either party.
 5. Tenant must maintain unit in good condition and report issues promptly.
 6. Governed by the laws of the Republic of Kenya.
 
-This agreement was digitally signed on LumindaRentals.`.trim();
+This agreement was digitally signed on LumidahRentals.`.trim();
     const blob = new Blob([content], { type: "text/plain" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
@@ -110,7 +110,7 @@ This agreement was digitally signed on LumindaRentals.`.trim();
               {[
                 "Monthly rent is payable in advance on or before the agreed due date.",
                 "Security deposit is refundable upon exit subject to unit condition.",
-                "All payments to be made via LumindaRentals (M-Pesa, card, or bank transfer).",
+                "All payments to be made via LumidahRentals (M-Pesa, card, or bank transfer).",
                 "Either party may terminate with 30 days written notice.",
                 "Tenant must maintain the unit in good condition and report issues promptly.",
                 "Governed by the laws of the Republic of Kenya.",
@@ -382,7 +382,7 @@ export default function TenantSettingsPage() {
           <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Home size={16} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumidahRentals</span>
         </div>
         <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
           <p style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--lr-text-muted)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "0 8px", marginBottom: 4 }}>Menu</p>

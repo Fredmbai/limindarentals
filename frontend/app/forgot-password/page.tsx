@@ -115,7 +115,7 @@ export default function ForgotPasswordPage() {
           <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Home size={16} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1rem", fontWeight: 600, color: "var(--lr-primary)" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1rem", fontWeight: 600, color: "var(--lr-primary)" }}>LumidahRentals</span>
         </div>
 
         {/* ── STEP 1: enter identifier ── */}

@@ -23,7 +23,7 @@ class UserAdmin(BaseUserAdmin):
             Notification.objects.create(
                 user    = user,
                 title   = "Account approved",
-                message = "Your LumindaRentals landlord account has been approved. You can now log in.",
+                message = "Your LumidahRentals landlord account has been approved. You can now log in.",
                 notification_type = "general",
             )
             updated += 1

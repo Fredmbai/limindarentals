@@ -1,4 +1,4 @@
-# LumindaRentals — Production Deployment Reference
+# LumidahRentals — Production Deployment Reference
 
 ## Stack
 - **Backend**: Django 6 + Gunicorn (port 8000)
@@ -10,7 +10,7 @@
 
 ## Directory layout on VPS
 ```
-/var/www/lumindarentals/
+/var/www/lumidahrentals/
 ├── backend/          ← Django project
 ├── frontend/         ← Next.js project
 └── venv/             ← Python virtual environment
@@ -18,14 +18,14 @@
 
 ## Environment variables
 
-### Backend — /var/www/lumindarentals/backend/.env
+### Backend — /var/www/lumidahrentals/backend/.env
 Copy from `backend/.env.example` and fill in:
 ```
 SECRET_KEY=<generate: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())">
 DEBUG=False
 ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 FRONTEND_URL=https://yourdomain.com
-DATABASE_URL=postgres://lumindarentals:PASSWORD@localhost:5432/lumindarentals_db
+DATABASE_URL=postgres://lumidahrentals:PASSWORD@localhost:5432/lumidahrentals_db
 REDIS_URL=redis://localhost:6379/0
 
 MPESA_CONSUMER_KEY=<live key>
@@ -39,18 +39,18 @@ PAYSTACK_SECRET_KEY=sk_live_...
 
 EMAIL_HOST_USER=nestiumsystems@gmail.com
 EMAIL_HOST_PASSWORD=<gmail app password>
-DEFAULT_FROM_EMAIL=LumindaRentals <nestiumsystems@gmail.com>
+DEFAULT_FROM_EMAIL=LumidahRentals <nestiumsystems@gmail.com>
 
 AT_USERNAME=<live africastalking username>
 AT_API_KEY=<live key>
-AT_SENDER_ID=LumindaRent
+AT_SENDER_ID=LumidahRent
 
 VAPID_PUBLIC_KEY=BHwkwmaE9307Snr1YIGtLr0CsAlVHwPtOx6i6osQ-XwkrQR5F5Xfzlk9d7sgPik4p0TjDKFeuHYKf3akvnonsLA
 VAPID_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg8sbyKPijvfqBOq7C\nblYb/vJL8bEZzliIB0ZOeMOp0YqhRANCAAR8JMJmhPd9O0p69WCBrS69ArAJVR8D\n7TseouqLEPl8JK0EeReV385ZPXe7ID4pOKdE4wyhXrh2Cn92pL56J7Cw\n-----END PRIVATE KEY-----\n
 VAPID_CLAIM_EMAIL=nestiumsystems@gmail.com
 ```
 
-### Frontend — /var/www/lumindarentals/frontend/.env.production
+### Frontend — /var/www/lumidahrentals/frontend/.env.production
 ```
 DJANGO_URL=http://127.0.0.1:8000
 ```
@@ -65,13 +65,13 @@ The browser never sees this — all API calls use relative URLs.
 apt update && apt install -y python3-venv python3-pip nodejs npm postgresql redis-server nginx
 
 # 2. Create database
-sudo -u postgres psql -c "CREATE USER lumindarentals WITH PASSWORD 'PASSWORD';"
-sudo -u postgres psql -c "CREATE DATABASE lumindarentals_db OWNER lumindarentals;"
+sudo -u postgres psql -c "CREATE USER lumidahrentals WITH PASSWORD 'PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE lumidahrentals_db OWNER lumidahrentals;"
 
-# 3. Clone / upload project to /var/www/lumindarentals/
+# 3. Clone / upload project to /var/www/lumidahrentals/
 
 # 4. Backend setup
-cd /var/www/lumindarentals
+cd /var/www/lumidahrentals
 python3 -m venv venv
 venv/bin/pip install -r backend/requirements.txt
 cd backend
@@ -80,76 +80,76 @@ cd backend
 ../venv/bin/python manage.py createsuperuser
 
 # 5. Frontend setup
-cd /var/www/lumindarentals/frontend
+cd /var/www/lumidahrentals/frontend
 npm ci
 npm run build
 ```
 
 ### Subsequent deploys
 ```bash
-cd /var/www/lumindarentals
+cd /var/www/lumidahrentals
 
 # Backend
 venv/bin/pip install -r backend/requirements.txt
 cd backend && ../venv/bin/python manage.py migrate && ../venv/bin/python manage.py collectstatic --noinput
-sudo systemctl restart lumindarentals-django lumindarentals-celery
+sudo systemctl restart lumidahrentals-django lumidahrentals-celery
 
 # Frontend
-cd /var/www/lumindarentals/frontend && npm ci && npm run build
-sudo systemctl restart lumindarentals-nextjs
+cd /var/www/lumidahrentals/frontend && npm ci && npm run build
+sudo systemctl restart lumidahrentals-nextjs
 ```
 
 ## Systemd service files
 
-### /etc/systemd/system/lumindarentals-django.service
+### /etc/systemd/system/lumidahrentals-django.service
 ```ini
 [Unit]
-Description=LumindaRentals Django (Gunicorn)
+Description=LumidahRentals Django (Gunicorn)
 After=network.target postgresql.service redis.service
 
 [Service]
 User=www-data
-WorkingDirectory=/var/www/lumindarentals/backend
-EnvironmentFile=/var/www/lumindarentals/backend/.env
-ExecStart=/var/www/lumindarentals/venv/bin/gunicorn core.wsgi:application \
+WorkingDirectory=/var/www/lumidahrentals/backend
+EnvironmentFile=/var/www/lumidahrentals/backend/.env
+ExecStart=/var/www/lumidahrentals/venv/bin/gunicorn core.wsgi:application \
     --bind 127.0.0.1:8000 \
     --workers 3 \
     --timeout 120 \
-    --access-logfile /var/log/lumindarentals/django-access.log \
-    --error-logfile  /var/log/lumindarentals/django-error.log
+    --access-logfile /var/log/lumidahrentals/django-access.log \
+    --error-logfile  /var/log/lumidahrentals/django-error.log
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-### /etc/systemd/system/lumindarentals-celery.service
+### /etc/systemd/system/lumidahrentals-celery.service
 ```ini
 [Unit]
-Description=LumindaRentals Celery Worker
+Description=LumidahRentals Celery Worker
 After=network.target redis.service
 
 [Service]
 User=www-data
-WorkingDirectory=/var/www/lumindarentals/backend
-EnvironmentFile=/var/www/lumindarentals/backend/.env
-ExecStart=/var/www/lumindarentals/venv/bin/celery -A core worker --loglevel=info \
-    --logfile=/var/log/lumindarentals/celery.log
+WorkingDirectory=/var/www/lumidahrentals/backend
+EnvironmentFile=/var/www/lumidahrentals/backend/.env
+ExecStart=/var/www/lumidahrentals/venv/bin/celery -A core worker --loglevel=info \
+    --logfile=/var/log/lumidahrentals/celery.log
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-### /etc/systemd/system/lumindarentals-nextjs.service
+### /etc/systemd/system/lumidahrentals-nextjs.service
 ```ini
 [Unit]
-Description=LumindaRentals Next.js
+Description=LumidahRentals Next.js
 After=network.target
 
 [Service]
 User=www-data
-WorkingDirectory=/var/www/lumindarentals/frontend
+WorkingDirectory=/var/www/lumidahrentals/frontend
 Environment=NODE_ENV=production
 Environment=PORT=3000
 ExecStart=/usr/bin/node node_modules/.bin/next start --port 3000
@@ -159,7 +159,7 @@ Restart=on-failure
 WantedBy=multi-user.target
 ```
 
-## Nginx config — /etc/nginx/sites-available/lumindarentals
+## Nginx config — /etc/nginx/sites-available/lumidahrentals
 ```nginx
 server {
     listen 80;
@@ -209,8 +209,8 @@ certbot --nginx -d yourdomain.com -d www.yourdomain.com
 ```bash
 # Enable and start all services
 sudo systemctl daemon-reload
-sudo systemctl enable --now lumindarentals-django lumindarentals-celery lumindarentals-nextjs
-sudo ln -s /etc/nginx/sites-available/lumindarentals /etc/nginx/sites-enabled/
+sudo systemctl enable --now lumidahrentals-django lumidahrentals-celery lumidahrentals-nextjs
+sudo ln -s /etc/nginx/sites-available/lumidahrentals /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

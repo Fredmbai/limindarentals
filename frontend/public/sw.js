@@ -1,4 +1,4 @@
-// LumindaRentals Service Worker
+// LumidahRentals Service Worker
 // Bump CACHE_VERSION on every production deploy to invalidate old caches.
 const CACHE_VERSION = "v1";
 
@@ -84,7 +84,7 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {};
   event.waitUntil(
-    self.registration.showNotification(data.title || "LumindaRentals", {
+    self.registration.showNotification(data.title || "LumidahRentals", {
       body:    data.body    || "",
       icon:    "/icons/icon.svg",
       badge:   "/icons/icon.svg",

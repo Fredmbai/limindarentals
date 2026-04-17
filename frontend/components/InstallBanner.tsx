@@ -98,7 +98,7 @@ export function InstallBanner() {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>
-            Use LumindaRentals as a mobile app
+            Use LumidahRentals as a mobile app
           </p>
           <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.72)", marginTop: 1 }}>
             Faster · works offline · no App Store needed
@@ -165,7 +165,7 @@ export function InstallBanner() {
                 },
                 {
                   n: "3",
-                  text: <>Tap <strong style={{ color: "var(--lr-primary)" }}>&ldquo;Add&rdquo;</strong> — LumindaRentals appears on your home screen like a native app.</>,
+                  text: <>Tap <strong style={{ color: "var(--lr-primary)" }}>&ldquo;Add&rdquo;</strong> — LumidahRentals appears on your home screen like a native app.</>,
                 },
               ].map((step) => (
                 <div key={step.n} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>

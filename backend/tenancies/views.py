@@ -276,7 +276,7 @@ class DeleteMyAccountView(APIView):
                     notify(
                         user              = landlord,
                         title             = f"Tenant deleted account — Unit {unit_number}",
-                        message           = f"{user.full_name} deleted their LumindaRentals account. Unit {unit_number} at {property_name} is now vacant.",
+                        message           = f"{user.full_name} deleted their LumidahRentals account. Unit {unit_number} at {property_name} is now vacant.",
                         notification_type = "tenancy",
                         send_sms_flag     = False,
                     )
@@ -546,7 +546,7 @@ class AddTenantByStaffView(APIView):
             from notifications.service import notify
             notify(
                 user              = tenant,
-                title             = "Welcome to LumindaRentals",
+                title             = "Welcome to LumidahRentals",
                 message           = f"Your tenancy for Unit {unit.unit_number} at {unit.property.name} is set up.",
                 notification_type = "tenancy",
                 send_sms_flag     = False,

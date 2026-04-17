@@ -279,7 +279,7 @@ def approve_landlord(request, user_id):
         Notification.objects.create(
             user    = landlord,
             title   = "Account approved",
-            message = "Your LumindaRentals landlord account has been approved. You can now log in.",
+            message = "Your LumidahRentals landlord account has been approved. You can now log in.",
             notification_type = "general",
         )
         return Response({"detail": f"{landlord.full_name} approved successfully."})
@@ -425,7 +425,7 @@ class DeleteMyAccountView(APIView):
                     notify(
                         user              = t.landlord,
                         title             = f"Tenant deleted account — Unit {t.unit.unit_number}",
-                        message           = f"{user.full_name} deleted their LumindaRentals account. Unit {t.unit.unit_number} at {t.unit.property.name} is now vacant.",
+                        message           = f"{user.full_name} deleted their LumidahRentals account. Unit {t.unit.unit_number} at {t.unit.property.name} is now vacant.",
                         notification_type = "tenancy",
                         send_sms_flag     = False,
                     )
@@ -529,14 +529,14 @@ class ForgotPasswordView(APIView):
             # Send via email
             try:
                 send_mail(
-                    subject    = "LumindaRentals — Your password reset code",
+                    subject    = "LumidahRentals — Your password reset code",
                     message    = (
                         f"Hi {user.full_name},\n\n"
                         f"Your password reset code is:\n\n"
                         f"    {otp}\n\n"
                         f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
                         f"If you did not request this, you can safely ignore this email.\n\n"
-                        f"— LumindaRentals"
+                        f"— LumidahRentals"
                     ),
                     from_email = django_settings.DEFAULT_FROM_EMAIL,
                     recipient_list = [user.email],
@@ -551,7 +551,7 @@ class ForgotPasswordView(APIView):
             sms_phone = user.phone
             if not sms_phone.startswith("+"):
                 sms_phone = f"+{sms_phone}" if sms_phone.startswith("254") else f"+254{sms_phone[1:]}"
-            send_sms(sms_phone, f"LumindaRentals: Your password reset code is {otp}. It expires in 10 minutes. Do not share it.")
+            send_sms(sms_phone, f"LumidahRentals: Your password reset code is {otp}. It expires in 10 minutes. Do not share it.")
 
         return Response({
             "full_name": user.full_name,

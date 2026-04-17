@@ -65,7 +65,7 @@ export default function LoginPage() {
           <div style={{ width: 40, height: 40, background: "rgba(255,255,255,0.15)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.2)" }}>
             <Home size={20} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1.25rem", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1.25rem", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>LumidahRentals</span>
         </div>
 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 16, padding: "48px 0" }}>
@@ -93,7 +93,7 @@ export default function LoginPage() {
             <div style={{ width: 32, height: 32, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Home size={16} color="#fff" />
             </div>
-            <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1rem", fontWeight: 600, color: "var(--lr-primary)" }}>LumindaRentals</span>
+            <span style={{ fontFamily: "'Sora', sans-serif", fontSize: "1rem", fontWeight: 600, color: "var(--lr-primary)" }}>LumidahRentals</span>
           </div>
 
           {/* Header */}

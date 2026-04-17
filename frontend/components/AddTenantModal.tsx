@@ -484,7 +484,7 @@ export function AddTenantModal({ onClose, onSuccess, restrictToProps }: Props) {
                 <div style={{ height: 1, background: "var(--lr-border)", margin: "8px 0" }} />
                 <p>1. Monthly rent payable in advance on due date.</p>
                 <p>2. Security deposit refundable upon exit in good condition.</p>
-                <p>3. Payments via LumindaRentals platform.</p>
+                <p>3. Payments via LumidahRentals platform.</p>
                 <p>4. 30 days written notice to terminate.</p>
                 <p>5. Governed by the laws of Kenya.</p>
               </div>

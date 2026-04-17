@@ -351,7 +351,7 @@ function AgreementStep({ data, onSign }: {
         <p>1. The monthly rent is <strong>{formatKES(data.rentAmount)}</strong> payable in advance on or before the agreed due date each month.</p>
         <p>2. A refundable security deposit of <strong>{formatKES(depositAmount || data.rentAmount)}</strong> is required before move-in.</p>
         <p>3. The tenancy commences on the lease start date selected below.</p>
-        <p>4. Rent payments shall be made via the LumindaRentals platform using M-Pesa, card, or bank transfer.</p>
+        <p>4. Rent payments shall be made via the LumidahRentals platform using M-Pesa, card, or bank transfer.</p>
         <p>5. The tenant agrees to maintain the unit in good condition and report maintenance issues promptly.</p>
         <p>6. Either party may terminate this agreement with 30 days written notice.</p>
         <p>7. This agreement is governed by the laws of the Republic of Kenya.</p>
@@ -884,7 +884,7 @@ function RegistrationSuccess({ name }: { name: string }) {
         <CheckCircle size={28} color="#639922" />
       </div>
       <h2 style={{ fontFamily: "'Sora', sans-serif", fontSize: "1.4rem", fontWeight: 700, color: "var(--lr-text-primary)", marginBottom: 8 }}>
-        Welcome to LumindaRentals!
+        Welcome to LumidahRentals!
       </h2>
       <p style={{ fontSize: "0.875rem", color: "var(--lr-text-muted)", marginBottom: 24, lineHeight: 1.7 }}>
         Your account is ready, <strong>{name}</strong>. You're being redirected to your dashboard.
@@ -1015,7 +1015,7 @@ export default function RegisterPage() {
           <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,255,255,0.2)" }}>
             <Home size={18} color="#fff" />
           </div>
-          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "#fff", fontSize: "1.1rem" }}>LumindaRentals</span>
+          <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "#fff", fontSize: "1.1rem" }}>LumidahRentals</span>
         </div>
 
         {/* Content */}
@@ -1044,7 +1044,7 @@ export default function RegisterPage() {
 
         {/* Footer */}
         <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}>
-          © {new Date().getFullYear()} LumindaRentals · Kenya
+          © {new Date().getFullYear()} LumidahRentals · Kenya
         </p>
       </div>
 
@@ -1057,7 +1057,7 @@ export default function RegisterPage() {
             <div style={{ width: 30, height: 30, background: "var(--lr-primary)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Home size={15} color="#fff" />
             </div>
-            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumindaRentals</span>
+            <span style={{ fontFamily: "'Sora', sans-serif", fontWeight: 600, color: "var(--lr-primary)", fontSize: "0.95rem" }}>LumidahRentals</span>
           </div>
 
           {screen === "forgot" ? (

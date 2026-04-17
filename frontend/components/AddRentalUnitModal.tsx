@@ -196,7 +196,7 @@ export function AddRentalUnitModal({ onClose, onSuccess, tenantName }: {
               <p>1. Monthly rent: <strong>{formatKES(selectedUnit?.rent_amount)}</strong>, payable in advance.</p>
               <p>2. Security deposit: <strong>{formatKES(depositAmount)}</strong>, refundable upon exit.</p>
               <p>3. Lease commences on the date selected below.</p>
-              <p>4. Payments via LumindaRentals platform (M-Pesa, card, or bank transfer).</p>
+              <p>4. Payments via LumidahRentals platform (M-Pesa, card, or bank transfer).</p>
               <p>5. Either party may terminate with 30 days written notice.</p>
               <p>6. Governed by the laws of Kenya.</p>
             </div>

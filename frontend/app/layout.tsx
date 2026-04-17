@@ -16,13 +16,13 @@ export const viewport: Viewport = {
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
-  title:       "LumindaRentals — Rent smarter. Manage better.",
+  title:       "LumidahRentals — Rent smarter. Manage better.",
   description: "Modern property management and rental payment platform for Kenya.",
   manifest:    "/manifest.json",
   appleWebApp: {
     capable:        true,
     statusBarStyle: "default",
-    title:          "LumindaRentals",
+    title:          "LumidahRentals",
   },
   icons: {
     apple: "/icons/icon.svg",
