@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Payment, PaymentMethod, Receipt, MpesaTransaction
+from .models import AutoPayment, Payment, PaymentMethod, Receipt, MpesaTransaction
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
@@ -26,3 +26,10 @@ class PaymentMethodAdmin(admin.ModelAdmin):
     list_filter     = ["method_type", "is_default", "is_active"]
     search_fields   = ["account_name", "account_number", "landlord__full_name", "landlord__phone"]
     readonly_fields = ["id", "created_at", "updated_at"]
+
+
+@admin.register(AutoPayment)
+class AutoPaymentAdmin(admin.ModelAdmin):
+    list_display    = ["tenant", "tenancy", "payment_method", "status", "due_day", "next_due_date", "last_triggered_at"]
+    list_filter     = ["payment_method", "status"]
+    search_fields   = ["tenant__email", "tenant__first_name", "tenant__last_name"]
