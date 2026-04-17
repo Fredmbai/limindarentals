@@ -169,11 +169,14 @@ USE_TZ        = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ── M-Pesa (Daraja) ───────────────────────────────────────────────────────────
-MPESA_CONSUMER_KEY    = env("MPESA_CONSUMER_KEY")
-MPESA_CONSUMER_SECRET = env("MPESA_CONSUMER_SECRET")
-MPESA_SHORTCODE       = env("MPESA_SHORTCODE")
-MPESA_PASSKEY         = env("MPESA_PASSKEY")
-MPESA_CALLBACK_URL    = env("MPESA_CALLBACK_URL")   # must be a public HTTPS URL in production
+# Leave blank until you receive Safaricom Daraja credentials.
+# The app boots and runs normally without them — payment initiation will fail
+# gracefully with a 502 if a tenant tries to pay via M-Pesa.
+MPESA_CONSUMER_KEY    = env("MPESA_CONSUMER_KEY",    default="")
+MPESA_CONSUMER_SECRET = env("MPESA_CONSUMER_SECRET", default="")
+MPESA_SHORTCODE       = env("MPESA_SHORTCODE",        default="")
+MPESA_PASSKEY         = env("MPESA_PASSKEY",          default="")
+MPESA_CALLBACK_URL    = env("MPESA_CALLBACK_URL",     default="")
 
 # ── M-Pesa B2B (Daraja) ───────────────────────────────────────────────────────
 MPESA_B2B_INITIATOR_NAME       = env("MPESA_B2B_INITIATOR_NAME",       default="")
@@ -183,21 +186,28 @@ MPESA_B2B_QUEUE_TIMEOUT_URL    = env("MPESA_B2B_QUEUE_TIMEOUT_URL",    default="
 ADMIN_EMAIL                    = env("ADMIN_EMAIL",                     default="")
 
 # ── Paystack ──────────────────────────────────────────────────────────────────
-PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY")
-PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY")
+# Leave blank until you receive Paystack credentials.
+PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
+PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
 
 # ── Email (Gmail SMTP) ────────────────────────────────────────────────────────
-EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST          = "smtp.gmail.com"
-EMAIL_PORT          = 587
-EMAIL_USE_TLS       = True
-EMAIL_HOST_USER     = env("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")   # Gmail App Password (16 chars)
-DEFAULT_FROM_EMAIL  = env("DEFAULT_FROM_EMAIL", default=f"LumidahRentals <{env('EMAIL_HOST_USER')}>")
+_email_user         = env("EMAIL_HOST_USER",     default="")
+EMAIL_HOST_USER     = _email_user
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL  = env("DEFAULT_FROM_EMAIL",  default=f"LumidahRentals <{_email_user}>")
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST     = "smtp.gmail.com"
+    EMAIL_PORT     = 587
+    EMAIL_USE_TLS  = True
+else:
+    # No credentials yet — log emails to console so the app still boots
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # ── Africa's Talking (SMS) ────────────────────────────────────────────────────
+# Leave blank until you receive Africa's Talking credentials.
 AT_USERNAME  = env("AT_USERNAME",  default="sandbox")
-AT_API_KEY   = env("AT_API_KEY")
+AT_API_KEY   = env("AT_API_KEY",   default="")
 AT_SENDER_ID = env("AT_SENDER_ID", default="AFRICASTKNG")
 
 # ── Celery / Redis ────────────────────────────────────────────────────────────
@@ -210,6 +220,6 @@ CELERY_RESULT_SERIALIZER = "json"
 # ── Web Push (VAPID) ──────────────────────────────────────────────────────────
 # Generate keys once with: python manage.py generate_vapid_keys
 # Then store them in .env — never commit the private key.
-VAPID_PUBLIC_KEY  = env("VAPID_PUBLIC_KEY")
-VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY")
+VAPID_PUBLIC_KEY  = env("VAPID_PUBLIC_KEY",  default="")
+VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")
 VAPID_CLAIM_EMAIL = env("VAPID_CLAIM_EMAIL", default="nestiumsystems@gmail.com")
