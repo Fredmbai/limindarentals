@@ -230,31 +230,77 @@ def trigger_automatic_payments():
     Runs daily at 8 AM EAT.
     Finds all ACTIVE AutoPayment records due today and triggers the appropriate
     payment flow (STK push for M-Pesa, charge_authorization for card).
+
+    M-Pesa staggering:
+      Tenants who have multiple auto-payments (e.g. two units) would receive
+      simultaneous STK pushes, which is confusing.  We group by tenant phone
+      number, sort each group by unit_number alphabetically, then apply a 180 s
+      (3-minute) countdown between each push for the same tenant so they arrive
+      one at a time.  A failure of one push never blocks the others.
+
+    Card payments are processed all at once — no tenant interaction required.
     """
+    from collections import defaultdict
     from django.utils import timezone
     from .models import AutoPayment
 
     today = timezone.now().date()
-    due_today = AutoPayment.objects.filter(
-        status        = AutoPayment.STATUS_ACTIVE,
-        next_due_date = today,
-    ).select_related(
-        "tenant",
-        "tenancy",
-        "tenancy__unit",
-        "tenancy__unit__property",
+    due_today = list(
+        AutoPayment.objects.filter(
+            status        = AutoPayment.STATUS_ACTIVE,
+            next_due_date = today,
+        ).select_related(
+            "tenant",
+            "tenancy",
+            "tenancy__unit",
+            "tenancy__unit__property",
+        )
     )
 
-    logger.info(f"trigger_automatic_payments: {due_today.count()} due today ({today})")
+    logger.info(f"trigger_automatic_payments: {len(due_today)} due today ({today})")
 
+    # ── Card payments — no stagger needed ────────────────────────────────────
     for ap in due_today:
-        try:
-            if ap.payment_method == AutoPayment.METHOD_MPESA:
-                _trigger_mpesa_autopay.delay(str(ap.id))
-            else:
+        if ap.payment_method != AutoPayment.METHOD_MPESA:
+            try:
                 _trigger_card_autopay.delay(str(ap.id))
-        except Exception:
-            logger.exception(f"Failed to dispatch auto-payment task for AutoPayment {ap.id}")
+            except Exception:
+                logger.exception(
+                    f"Failed to dispatch card auto-payment for AutoPayment {ap.id}"
+                )
+
+    # ── M-Pesa payments — stagger per tenant phone ───────────────────────────
+    # Group by the phone that will receive the STK push (mpesa_number falls back
+    # to tenant.phone; use tenant PK as last-resort key to avoid mixing).
+    tenant_groups: dict[str, list] = defaultdict(list)
+    for ap in due_today:
+        if ap.payment_method == AutoPayment.METHOD_MPESA:
+            key = ap.mpesa_number or ap.tenant.phone or str(ap.tenant.id)
+            tenant_groups[key].append(ap)
+
+    for phone_key, aps in tenant_groups.items():
+        # Sort by unit_number so ordering is deterministic
+        aps.sort(key=lambda ap: ap.tenancy.unit.unit_number)
+
+        for idx, ap in enumerate(aps):
+            delay        = idx * 180   # 0 s, 180 s, 360 s, …
+            tenant_email = ap.tenant.email or ap.tenant.phone
+            unit_name    = ap.tenancy.unit.unit_number
+
+            logger.info(
+                f"Scheduling STK push for tenant {tenant_email} "
+                f"unit {unit_name} in {delay} seconds"
+            )
+
+            try:
+                _trigger_mpesa_autopay.apply_async(
+                    args      = [str(ap.id)],
+                    countdown = delay,
+                )
+            except Exception:
+                logger.exception(
+                    f"Failed to dispatch M-Pesa auto-payment for AutoPayment {ap.id}"
+                )
 
 
 @shared_task

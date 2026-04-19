@@ -927,15 +927,16 @@ class TriggerAutomaticPaymentsTests(TestCase):
 
     @patch("payments.tasks._trigger_mpesa_autopay")
     def test_stk_push_triggered_on_due_date(self, mock_mpesa):
-        """trigger_automatic_payments calls _trigger_mpesa_autopay for due M-Pesa auto-pay."""
+        """trigger_automatic_payments dispatches _trigger_mpesa_autopay for due M-Pesa auto-pay."""
         from payments.tasks import trigger_automatic_payments
         trigger_automatic_payments()
-        mock_mpesa.delay.assert_called_once_with(str(self.ap.id))
+        mock_mpesa.apply_async.assert_called_once_with(
+            args=[str(self.ap.id)], countdown=0
+        )
 
     @patch("payments.tasks._trigger_card_autopay")
     def test_card_charge_triggered_on_due_date(self, mock_card):
         """trigger_automatic_payments calls _trigger_card_autopay for due card auto-pay."""
-        import datetime as dt
         from payments.models import AutoPayment
         self.ap.payment_method = "CARD"
         self.ap.card_token     = "AUTH_test"
@@ -955,7 +956,7 @@ class TriggerAutomaticPaymentsTests(TestCase):
 
         from payments.tasks import trigger_automatic_payments
         trigger_automatic_payments()
-        mock_mpesa.delay.assert_not_called()
+        mock_mpesa.apply_async.assert_not_called()
 
     @patch("payments.tasks._trigger_mpesa_autopay")
     def test_future_due_date_not_triggered(self, mock_mpesa):
@@ -966,7 +967,40 @@ class TriggerAutomaticPaymentsTests(TestCase):
 
         from payments.tasks import trigger_automatic_payments
         trigger_automatic_payments()
-        mock_mpesa.delay.assert_not_called()
+        mock_mpesa.apply_async.assert_not_called()
+
+    @patch("payments.tasks._trigger_mpesa_autopay")
+    def test_multiple_units_same_tenant_staggered(self, mock_mpesa):
+        """Two M-Pesa auto-pays for the same tenant are staggered 180 s apart."""
+        import datetime as dt
+        from accounts.models import User
+        from payments.models import AutoPayment
+        from properties.models import Unit
+        from tenancies.models import Tenancy
+
+        # Add a second unit/tenancy for the same tenant, same phone number
+        unit2 = Unit.objects.create(
+            property=self.tenancy.unit.property,
+            unit_number="TR2", unit_type="bedsitter", rent_amount=9_000,
+        )
+        tenancy2 = Tenancy.objects.create(
+            unit=unit2, tenant=self.tenant, landlord=self.landlord,
+            rent_snapshot=Decimal("9000"), deposit_amount=Decimal("9000"),
+            lease_start_date=dt.date(2025, 1, 1), status="active", due_day=5,
+        )
+        ap2 = AutoPayment.objects.create(
+            tenant=self.tenant, tenancy=tenancy2,
+            payment_method="MPESA", mpesa_number="0722000001",  # same phone
+            due_day=5, next_due_date=dt.date.today(),
+        )
+
+        from payments.tasks import trigger_automatic_payments
+        trigger_automatic_payments()
+
+        calls = mock_mpesa.apply_async.call_args_list
+        self.assertEqual(len(calls), 2)
+        countdowns = sorted(c.kwargs["countdown"] for c in calls)
+        self.assertEqual(countdowns, [0, 180])
 
     def test_landlord_due_day_change_propagates(self):
         """Changing tenancy.due_day via API updates AutoPayment.due_day and next_due_date."""
@@ -984,7 +1018,7 @@ class TriggerAutomaticPaymentsTests(TestCase):
         self.assertEqual(self.ap.due_day, 15)
         self.assertEqual(self.ap.next_due_date.day, 15)
 
-    @patch("payments.tasks.daraja")
+    @patch("payments.mpesa.daraja.daraja")
     @patch("payments.tasks.send_sms", create=True)
     def test_failed_mpesa_sends_sms_and_schedules_retry(self, mock_sms, mock_daraja):
         """On STK push failure, tenant receives SMS and retry is scheduled."""
