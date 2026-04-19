@@ -101,24 +101,27 @@ export interface InitialAmountDue {
 
 // ── Payments ─────────────────────────────────────────────
 export interface Payment {
-  id:             string;
-  tenancy:        string;
-  tenancy_unit:   string;
-  tenant_name:    string;
-  payment_type:   "initial" | "monthly" | "custom";
-  method:         "mpesa" | "card" | "bank";
-  status:         "pending" | "success" | "failed";
-  amount_due:     string;
-  amount_paid:    string;
-  balance:        number;
-  transaction_id: string | null;
-  period_start:   string | null;
-  period_end:     string | null;
-  due_date:       string | null;
-  paid_at:        string | null;
-  receipt_number: string | null;
-  bank_proof:     string | null;
-  created_at:     string;
+  id:               string;
+  tenancy:          string;
+  tenancy_unit:     string;
+  tenant_name:      string;
+  payment_type:     "initial" | "monthly" | "balance" | "1_day" | "1_week" | "3_months" | "6_months";
+  method:           "mpesa" | "card" | "bank";
+  status:           "pending" | "success" | "failed";
+  amount_due:       string;
+  amount_paid:      string;
+  balance:          number;
+  is_partial:       boolean;
+  balance_due:      string | null;
+  balance_paid_at:  string | null;
+  transaction_id:   string | null;
+  period_start:     string | null;
+  period_end:       string | null;
+  due_date:         string | null;
+  paid_at:          string | null;
+  receipt_number:   string | null;
+  bank_proof:       string | null;
+  created_at:       string;
 }
 
 export interface Receipt {

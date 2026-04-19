@@ -101,6 +101,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "id", "tenancy", "tenancy_unit", "tenant_name",
             "payment_type", "method", "status",
             "amount_due", "amount_paid", "balance",
+            "is_partial", "balance_due", "balance_paid_at",
             "transaction_id", "period_start", "period_end",
             "due_date", "paid_at", "receipt_number",
             "created_at",

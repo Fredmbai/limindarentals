@@ -260,6 +260,18 @@ class Payment(models.Model):
     # paid_at: when payment was confirmed by provider callback
     paid_at        = models.DateTimeField(null=True, blank=True)
 
+    # Partial payment tracking — set automatically by mark_success() when amount_paid < amount_due
+    is_partial      = models.BooleanField(default=False)
+    balance_due     = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    balance_paid_at = models.DateTimeField(null=True, blank=True)
+    # For balance payments — points back to the partial payment being cleared
+    parent_payment  = models.ForeignKey(
+                          "self",
+                          on_delete=models.SET_NULL,
+                          null=True, blank=True,
+                          related_name="balance_payments",
+                      )
+
     # For bank transfers: tenant uploads proof, landlord verifies
     bank_proof     = models.FileField(
                          upload_to="bank_proofs/",
@@ -292,16 +304,26 @@ class Payment(models.Model):
 
     def mark_success(self, transaction_id, amount_paid=None):
         """
-        Called ONLY from payment provider callbacks (M-Pesa, Flutterwave).
+        Called ONLY from payment provider callbacks (M-Pesa, Paystack).
         Never call this from the frontend directly.
         """
+        from decimal import Decimal
         import django.utils.timezone as tz
         self.status         = self.Status.SUCCESS
         self.transaction_id = transaction_id
         self.amount_paid    = amount_paid or self.amount_due
         self.paid_at        = tz.now()
+        paid     = Decimal(str(self.amount_paid))
+        due      = Decimal(str(self.amount_due))
+        if paid < due:
+            self.is_partial  = True
+            self.balance_due = due - paid
+        else:
+            self.is_partial  = False
+            self.balance_due = None
         self.save(update_fields=[
-            "status", "transaction_id", "amount_paid", "paid_at", "updated_at"
+            "status", "transaction_id", "amount_paid", "paid_at",
+            "is_partial", "balance_due", "updated_at",
         ])
 
 

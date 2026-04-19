@@ -30,6 +30,7 @@ class PaymentMethodAdmin(admin.ModelAdmin):
 
 @admin.register(AutoPayment)
 class AutoPaymentAdmin(admin.ModelAdmin):
-    list_display    = ["tenant", "tenancy", "payment_method", "status", "due_day", "next_due_date", "last_triggered_at"]
+    list_display    = ["tenant", "tenancy", "payment_method", "status", "due_day", "next_due_date", "last_triggered_at", "created_at"]
     list_filter     = ["payment_method", "status"]
     search_fields   = ["tenant__email", "tenant__first_name", "tenant__last_name"]
+    ordering        = ["-created_at"]

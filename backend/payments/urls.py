@@ -18,6 +18,7 @@ from .views import (
     ReceiptDownloadView,
     TenancyReceiptsView,
     TenancyPaymentsView,
+    PayBalanceView,
 )
 
 urlpatterns = [
@@ -61,6 +62,9 @@ urlpatterns = [
 
      path("tenancy/<uuid:tenancy_id>/",          TenancyPaymentsView.as_view(),  name="tenancy-payments"),
      path("tenancy/<uuid:tenancy_id>/receipts/", TenancyReceiptsView.as_view(),  name="tenancy-receipts"),
+
+    # Pay outstanding balance on a partial payment
+    path("pay-balance/<uuid:pk>/", PayBalanceView.as_view(), name="pay-balance"),
 
     # M-Pesa B2B disbursement callbacks — called by Safaricom
     path("mpesa/b2b/result/",  MpesaB2BResultView.as_view(),       name="mpesa-b2b-result"),

@@ -212,7 +212,9 @@ function PaymentDrawer({ payment, onClose, onVerifyBank }: {
               { label: "Payment type",   value: typeLabel[payment.payment_type] || payment.payment_type },
               { label: "Amount due",     value: formatKES(payment.amount_due) },
               { label: "Amount paid",    value: formatKES(payment.amount_paid) },
-              ...(payment.balance > 0 ? [{ label: "Balance remaining", value: formatKES(payment.balance) }] : []),
+              ...(payment.is_partial && payment.balance_due && parseFloat(payment.balance_due) > 0 && !payment.balance_paid_at
+                ? [{ label: "Balance outstanding", value: formatKES(parseFloat(payment.balance_due)) }] : []),
+              ...(payment.balance_paid_at ? [{ label: "Balance cleared on", value: formatDate(payment.balance_paid_at) }] : []),
               ...(payment.transaction_id ? [{ label: "Transaction ID", value: payment.transaction_id }] : []),
               ...(payment.receipt_number ? [{ label: "Receipt number", value: payment.receipt_number }] : []),
               { label: "Date created",   value: formatDate(payment.created_at) },
@@ -651,6 +653,16 @@ export default function LandlordPaymentsPage() {
                     {/* Status */}
                     <div className="table-cell">
                       <span className={`badge ${badge.class}`}>{badge.label}</span>
+                      {p.is_partial && p.balance_due && parseFloat(p.balance_due) > 0 && !p.balance_paid_at && (
+                        <span style={{ display: "block", marginTop: 3, padding: "1px 6px", borderRadius: 99, fontSize: "0.62rem", fontWeight: 700, background: "#FEF0E0", color: "#A85A00", width: "fit-content" }}>
+                          Partial
+                        </span>
+                      )}
+                      {p.balance_paid_at && (
+                        <span style={{ display: "block", marginTop: 3, padding: "1px 6px", borderRadius: 99, fontSize: "0.62rem", fontWeight: 700, background: "#EAF3DE", color: "#27500A", width: "fit-content" }}>
+                          Balance cleared
+                        </span>
+                      )}
                       {p.method === "bank" && p.status === "pending" && (
                         <p style={{ fontSize: "0.68rem", color: "#BA7517", marginTop: 3 }}>Needs review</p>
                       )}

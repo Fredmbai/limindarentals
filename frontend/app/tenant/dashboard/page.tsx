@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Home, CreditCard, FileText, Wrench, Settings, LogOut,
   AlertCircle, CheckCircle, Clock, Building2, Plus,
-  Zap, PauseCircle, X, ChevronRight, Smartphone,
+  Zap, PauseCircle, X, ChevronRight, Smartphone, CalendarCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
@@ -63,18 +63,24 @@ function AutoPayBadge({
 }) {
   if (!ap || ap.status === "CANCELLED") {
     return (
-      <button
-        onClick={onManage}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 5,
-          padding: "3px 10px", borderRadius: 99, fontSize: "0.72rem",
-          fontWeight: 600, background: "var(--lr-bg-page)",
-          border: "1px solid var(--lr-border)", color: "var(--lr-text-muted)",
-          cursor: "pointer", whiteSpace: "nowrap",
-        }}
-      >
-        Manual pay · Set up auto-pay
-      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+        <button
+          onClick={onManage}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 7,
+            padding: "8px 16px", borderRadius: 8, fontSize: "0.82rem",
+            fontWeight: 700, background: "#1D9E75",
+            border: "none", color: "#fff",
+            cursor: "pointer", whiteSpace: "nowrap",
+            boxShadow: "0 2px 8px rgba(29,158,117,0.30)",
+          }}
+        >
+          <CalendarCheck size={15} /> Subscribe to Auto Pay
+        </button>
+        <p style={{ fontSize: "0.68rem", color: "var(--lr-text-muted)", paddingLeft: 2 }}>
+          Never miss a rent payment
+        </p>
+      </div>
     );
   }
 
@@ -84,13 +90,13 @@ function AutoPayBadge({
         onClick={onManage}
         style={{
           display: "inline-flex", alignItems: "center", gap: 5,
-          padding: "3px 10px", borderRadius: 99, fontSize: "0.72rem",
+          padding: "4px 12px", borderRadius: 99, fontSize: "0.72rem",
           fontWeight: 600, background: "#FAEEDA",
           border: "none", color: "#633806",
           cursor: "pointer", whiteSpace: "nowrap",
         }}
       >
-        <PauseCircle size={12} /> Auto-pay PAUSED · Resume
+        <PauseCircle size={12} /> Auto-pay Paused · Resume
       </button>
     );
   }
@@ -100,13 +106,13 @@ function AutoPayBadge({
       onClick={onManage}
       style={{
         display: "inline-flex", alignItems: "center", gap: 5,
-        padding: "3px 10px", borderRadius: 99, fontSize: "0.72rem",
+        padding: "4px 12px", borderRadius: 99, fontSize: "0.72rem",
         fontWeight: 600, background: "#E1F5EE",
         border: "none", color: "#085041",
         cursor: "pointer", whiteSpace: "nowrap",
       }}
     >
-      <Zap size={12} /> Auto-pay ON · {ap.next_due_date} · Manage
+      <Zap size={12} /> Auto-pay Active · {ap.next_due_date} · Manage
     </button>
   );
 }

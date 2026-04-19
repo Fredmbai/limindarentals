@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard, Smartphone, Banknote, Loader2, CheckCircle, X,
   ArrowRight, AlertCircle, Home, LogOut, FileText, Wrench, Settings,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,6 +46,7 @@ export default function TenantPaymentsPage() {
   const [messages,     setMessages]     = useState<Record<string, { type: "success" | "error"; text: string } | null>>({});
   const [paying,       setPaying]       = useState<Record<string, boolean>>({});
   const [polling,      setPolling]      = useState<Record<string, boolean>>({});
+  const [balanceModal, setBalanceModal] = useState<Payment | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -210,6 +212,124 @@ export default function TenantPaymentsPage() {
     await logout();
     router.push("/login");
   };
+
+  // ── Pay Balance Modal ──────────────────────────────────────────────────────
+  function PayBalanceModal({ payment, onClose }: { payment: Payment; onClose: () => void }) {
+    const [method,   setMethod]   = useState<"mpesa" | "card">("mpesa");
+    const [phone,    setPhone]    = useState(user?.phone || "");
+    const [loading,  setLoading]  = useState(false);
+    const [error,    setError]    = useState("");
+    const [success,  setSuccess]  = useState("");
+    const [balPolling, setBalPolling] = useState(false);
+
+    const balDue    = parseFloat(payment.balance_due || "0");
+    const surcharge = parseFloat((balDue * 0.026).toFixed(2));
+    const cardTotal = balDue + surcharge;
+
+    async function pay() {
+      setLoading(true); setError("");
+      try {
+        const payload: any = { payment_method: method };
+        if (method === "mpesa" && phone) payload.phone = phone;
+        const res = await api.post(`/api/payments/pay-balance/${payment.id}/`, payload);
+        if (res.data.payment_url) {
+          window.location.href = res.data.payment_url;
+          return;
+        }
+        setSuccess("STK push sent. Enter your M-Pesa PIN.");
+        setBalPolling(true);
+        // Poll the new balance payment
+        const newPaymentId = res.data.payment_id;
+        let attempts = 0;
+        const interval = setInterval(async () => {
+          attempts++;
+          try {
+            const s = await api.get(`/api/payments/${newPaymentId}/status/`);
+            if (s.data.status === "success") {
+              clearInterval(interval);
+              setBalPolling(false);
+              setSuccess("Balance cleared! Your payment is now complete.");
+              queryClient.invalidateQueries({ queryKey: ["my-payments"] });
+              queryClient.invalidateQueries({ queryKey: ["my-tenancies"] });
+            } else if (s.data.status === "failed" || attempts >= 20) {
+              clearInterval(interval);
+              setBalPolling(false);
+              setSuccess("");
+              setError("Payment failed or timed out.");
+            }
+          } catch { if (attempts >= 20) { clearInterval(interval); setBalPolling(false); } }
+        }, 5000);
+      } catch (e: any) {
+        setError(e?.response?.data?.detail || "Payment failed. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 420, padding: 28, position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.18)" }}>
+          <button onClick={onClose} style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", cursor: "pointer", color: "var(--lr-text-muted)" }}><X size={20} /></button>
+
+          {success && !balPolling ? (
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <CheckCircle size={40} color="#639922" style={{ margin: "0 auto 12px", display: "block" }} />
+              <p style={{ fontWeight: 600, color: "var(--lr-text-primary)" }}>{success}</p>
+              <button className="btn-primary" onClick={onClose} style={{ marginTop: 20, width: "100%", justifyContent: "center" }}>Done</button>
+            </div>
+          ) : (
+            <>
+              <h2 style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: "1.05rem", marginBottom: 4 }}>Pay outstanding balance</h2>
+              <p style={{ fontSize: "0.8rem", color: "var(--lr-text-muted)", marginBottom: 20 }}>
+                Unit {payment.tenancy_unit} · Outstanding: <strong style={{ color: "#A32D2D" }}>{formatKES(balDue)}</strong>
+              </p>
+
+              {/* Method picker */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                {([
+                  { value: "mpesa", label: "M-Pesa", detail: `${formatKES(balDue)} — No extra charges`, icon: <Smartphone size={16} /> },
+                  { value: "card",  label: "Card (Visa/Mastercard)", detail: `${formatKES(cardTotal)} incl. 2.6% fee`, icon: <CreditCard size={16} /> },
+                ] as const).map((opt) => (
+                  <button key={opt.value} onClick={() => setMethod(opt.value)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", border: `2px solid ${method === opt.value ? "#1D9E75" : "var(--lr-border)"}`, borderRadius: 10, background: method === opt.value ? "#E1F5EE" : "#fff", cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ color: method === opt.value ? "#085041" : "var(--lr-text-muted)" }}>{opt.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 600, fontSize: "0.875rem", color: method === opt.value ? "#085041" : "var(--lr-text-primary)" }}>{opt.label}</p>
+                      <p style={{ fontSize: "0.72rem", color: "var(--lr-text-muted)" }}>{opt.detail}</p>
+                    </div>
+                    {method === opt.value && <CheckCircle size={14} color="#1D9E75" />}
+                  </button>
+                ))}
+              </div>
+
+              {method === "mpesa" && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 600, display: "block", marginBottom: 6 }}>M-Pesa number</label>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07XXXXXXXX"
+                    style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--lr-border)", fontSize: "0.9rem", boxSizing: "border-box" }} />
+                </div>
+              )}
+
+              {balPolling && (
+                <div style={{ background: "var(--lr-primary-light)", borderRadius: 8, padding: "10px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Loader2 size={14} color="var(--lr-primary)" style={{ animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                  <p style={{ fontSize: "0.75rem", color: "var(--lr-primary-dark)", fontWeight: 500 }}>Waiting for M-Pesa confirmation...</p>
+                </div>
+              )}
+
+              {error && <p style={{ color: "var(--lr-danger)", fontSize: "0.8rem", marginBottom: 12 }}>{error}</p>}
+
+              <button className="btn-primary" onClick={pay} disabled={loading || balPolling}
+                style={{ width: "100%", justifyContent: "center", background: "#E07B15", borderColor: "#E07B15" }}>
+                {loading ? <><Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} /> Processing...</>
+                  : <>Pay {method === "card" ? formatKES(cardTotal) : formatKES(balDue)} <ArrowRight size={14} /></>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--lr-bg-page)" }}>
@@ -514,26 +634,49 @@ export default function TenantPaymentsPage() {
                   bank:  <Banknote size={12} color="#BA7517" />,
                 };
                 return (
-                  <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--lr-border)", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--lr-bg-page)", border: "1px solid var(--lr-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        {methodIcons[p.method]}
+                  <div key={p.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--lr-border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--lr-bg-page)", border: "1px solid var(--lr-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {methodIcons[p.method]}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+                            <p style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--lr-text-primary)" }}>
+                              {p.payment_type === "initial" ? "Initial payment" : p.payment_type === "monthly" ? "Monthly rent" : p.payment_type.replace("_", " ")}
+                              {" · "}Unit {p.tenancy_unit}
+                            </p>
+                            {p.is_partial && p.balance_due && parseFloat(p.balance_due) > 0 && (
+                              <span style={{ padding: "1px 7px", borderRadius: 99, fontSize: "0.62rem", fontWeight: 700, background: "#FEF0E0", color: "#A85A00", border: "1px solid rgba(168,90,0,0.25)", whiteSpace: "nowrap" }}>
+                                Partial
+                              </span>
+                            )}
+                          </div>
+                          <p style={{ fontSize: "0.7rem", color: "var(--lr-text-muted)" }}>
+                            {p.paid_at ? formatDate(p.paid_at) : formatDate(p.created_at)}
+                            {p.receipt_number ? ` · ${p.receipt_number}` : ""}
+                          </p>
+                        </div>
                       </div>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontSize: "0.82rem", fontWeight: 500, color: "var(--lr-text-primary)", marginBottom: 1 }}>
-                          {p.payment_type === "initial" ? "Initial payment" : p.payment_type === "monthly" ? "Monthly rent" : p.payment_type.replace("_", " ")}
-                          {" · "}Unit {p.tenancy_unit}
-                        </p>
-                        <p style={{ fontSize: "0.7rem", color: "var(--lr-text-muted)" }}>
-                          {p.paid_at ? formatDate(p.paid_at) : formatDate(p.created_at)}
-                          {p.receipt_number ? ` · ${p.receipt_number}` : ""}
-                        </p>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--lr-text-primary)", marginBottom: 2 }}>{formatKES(p.amount_paid)}</p>
+                        <span className={`badge ${badge.class}`}>{badge.label}</span>
                       </div>
                     </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--lr-text-primary)", marginBottom: 2 }}>{formatKES(p.amount_paid)}</p>
-                      <span className={`badge ${badge.class}`}>{badge.label}</span>
-                    </div>
+                    {p.is_partial && p.balance_due && parseFloat(p.balance_due) > 0 && !p.balance_paid_at && (
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FEF0E0", borderRadius: 8, padding: "8px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <AlertTriangle size={13} color="#A85A00" />
+                          <p style={{ fontSize: "0.75rem", color: "#A85A00", fontWeight: 500 }}>Balance due: {formatKES(parseFloat(p.balance_due))}</p>
+                        </div>
+                        <button
+                          onClick={() => setBalanceModal(p)}
+                          style={{ padding: "5px 12px", borderRadius: 6, background: "#E07B15", color: "#fff", border: "none", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                        >
+                          Pay Balance {formatKES(parseFloat(p.balance_due))}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -553,6 +696,13 @@ export default function TenantPaymentsPage() {
           </Link>
         ))}
       </nav>
+
+      {balanceModal && (
+        <PayBalanceModal
+          payment={balanceModal}
+          onClose={() => setBalanceModal(null)}
+        />
+      )}
 
       <style>{`
         .tenant-sidebar {

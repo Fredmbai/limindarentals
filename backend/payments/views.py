@@ -331,6 +331,14 @@ class MpesaCallbackView(APIView):
                 create_receipt(payment)
                 activate_tenancy_if_initial(payment)
 
+                # If this completed a partial payment, clear the parent's balance flags
+                if payment.parent_payment_id:
+                    Payment.objects.filter(id=payment.parent_payment_id).update(
+                        is_partial=False,
+                        balance_due=None,
+                        balance_paid_at=timezone.now(),
+                    )
+
                 # Trigger B2B disbursement to landlord
                 from .tasks import initiate_b2b_disbursement, advance_autopay_due_date
                 initiate_b2b_disbursement.apply_async(
@@ -408,6 +416,12 @@ class PaystackWebhookView(APIView):
             )
             create_receipt(payment)
             activate_tenancy_if_initial(payment)
+            if payment.parent_payment_id:
+                Payment.objects.filter(id=payment.parent_payment_id).update(
+                    is_partial=False,
+                    balance_due=None,
+                    balance_paid_at=timezone.now(),
+                )
 
         return Response({"status": "ok"})
 
@@ -458,6 +472,12 @@ class PaystackReturnView(APIView):
                         )
                         create_receipt(payment)
                         activate_tenancy_if_initial(payment)
+                        if payment.parent_payment_id:
+                            Payment.objects.filter(id=payment.parent_payment_id).update(
+                                is_partial=False,
+                                balance_due=None,
+                                balance_paid_at=timezone.now(),
+                            )
         except Exception as e:
             logger.error(f"Paystack return verify failed: {e}")
 
@@ -957,6 +977,114 @@ class AutoPaymentUpdateCardView(APIView):
         ap.card_last_four = card_last_four
         ap.save(update_fields=["card_token", "card_last_four", "updated_at"])
         return Response(AutoPaymentSerializer(ap).data)
+
+
+# ──────────────────────────────────────────────
+# PAY BALANCE — tenant pays outstanding partial balance
+# ──────────────────────────────────────────────
+
+class PayBalanceView(APIView):
+    """
+    POST /api/payments/pay-balance/<pk>/
+
+    Tenant pays the remaining balance on a partial payment.
+    Creates a new Payment (type=balance) linked to the original via parent_payment.
+    On success, the M-Pesa callback / Paystack webhook clears the parent's balance flags.
+    """
+    permission_classes = [IsTenant]
+
+    @transaction.atomic
+    def post(self, request, pk):
+        original = get_object_or_404(
+            Payment,
+            id=pk,
+            tenancy__tenant=request.user,
+        )
+        if not original.is_partial or not original.balance_due or original.balance_due <= 0:
+            return Response(
+                {"detail": "This payment has no outstanding balance."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        method = request.data.get("payment_method", "mpesa")
+        if method not in ("mpesa", "card"):
+            return Response(
+                {"detail": "payment_method must be 'mpesa' or 'card'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        balance_amount = Decimal(str(original.balance_due))
+        card_surcharge = (
+            Decimal(str(calculate_card_surcharge(balance_amount)))
+            if method == "card" else Decimal("0")
+        )
+        charge_amount = balance_amount + card_surcharge
+
+        balance_payment = Payment.objects.create(
+            tenancy               = original.tenancy,
+            amount_due            = balance_amount,
+            card_surcharge_amount = card_surcharge,
+            payment_type          = Payment.PaymentType.BALANCE,
+            method                = Payment.Method.MPESA if method == "mpesa" else Payment.Method.CARD,
+            status                = Payment.Status.PENDING,
+            parent_payment        = original,
+        )
+
+        if method == "mpesa":
+            try:
+                phone = format_phone_for_mpesa(
+                    request.data.get("phone") or original.tenancy.tenant.phone
+                )
+                result = daraja.stk_push(
+                    phone       = phone,
+                    amount      = charge_amount,
+                    payment_id  = str(balance_payment.id),
+                    description = f"Balance Unit {original.tenancy.unit.unit_number}",
+                )
+                balance_payment.transaction_id = result.get("CheckoutRequestID")
+                balance_payment.save(update_fields=["transaction_id"])
+                return Response({
+                    "payment_id":          str(balance_payment.id),
+                    "checkout_request_id": result.get("CheckoutRequestID"),
+                    "message":             "STK push sent. Enter your M-Pesa PIN.",
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                balance_payment.status = Payment.Status.FAILED
+                balance_payment.save(update_fields=["status"])
+                return Response(
+                    {"detail": f"M-Pesa request failed: {str(e)}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+        else:  # card
+            try:
+                tenant       = original.tenancy.tenant
+                callback_url = request.build_absolute_uri(
+                    f"/api/payments/card/return/?payment_id={balance_payment.id}"
+                )
+                result = paystack.initiate_payment(
+                    payment_id   = str(balance_payment.id),
+                    amount_kes   = charge_amount,
+                    email        = tenant.email or "",
+                    full_name    = tenant.full_name,
+                    phone        = tenant.phone,
+                    description  = f"Balance Unit {original.tenancy.unit.unit_number}",
+                    callback_url = callback_url,
+                    channels     = ["card"],
+                )
+                auth_url = result["data"]["authorization_url"]
+                return Response({
+                    "payment_id":  str(balance_payment.id),
+                    "payment_url": auth_url,
+                    "message":     "Redirect to payment_url to complete card payment.",
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                balance_payment.status = Payment.Status.FAILED
+                balance_payment.save(update_fields=["status"])
+                return Response(
+                    {"detail": f"Card payment failed: {str(e)}"},
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
 
 
 # ──────────────────────────────────────────────

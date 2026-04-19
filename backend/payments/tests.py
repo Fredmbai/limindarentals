@@ -994,3 +994,146 @@ class TriggerAutomaticPaymentsTests(TestCase):
             from payments.tasks import _trigger_mpesa_autopay
             _trigger_mpesa_autopay(str(self.ap.id))
             mock_retry.apply_async.assert_called_once()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Partial Payment — is_partial / balance_due / PayBalanceView
+# ──────────────────────────────────────────────────────────────────────────────
+
+class PartialPaymentModelTests(TestCase):
+    """mark_success() correctly sets/clears is_partial and balance_due."""
+
+    def _make_payment(self, amount_due):
+        from payments.models import Payment
+        from tenancies.models import Tenancy
+        from accounts.models import User
+        from properties.models import Property, Unit
+        import uuid
+        suffix = uuid.uuid4().hex[:6]
+        landlord = User.objects.create_user(phone=f"07001{suffix}", password="pass", full_name=f"LL {suffix}", role="landlord")
+        tenant   = User.objects.create_user(phone=f"07003{suffix}", password="pass", full_name=f"TN {suffix}", role="tenant")
+        prop = Property.objects.create(landlord=landlord, name="P", address="A")
+        unit = Unit.objects.create(property=prop, unit_number="T1", rent_amount=amount_due)
+        tenancy = Tenancy.objects.create(
+            landlord=landlord, tenant=tenant, unit=unit,
+            rent_snapshot=amount_due, deposit_amount=0,
+            lease_start_date="2024-01-01", status="active",
+        )
+        return Payment.objects.create(
+            tenancy=tenancy, amount_due=amount_due,
+            payment_type="monthly", method="mpesa",
+            status="pending",
+        )
+
+    def test_full_payment_clears_partial_flag(self):
+        p = self._make_payment(10000)
+        p.mark_success("TX001", amount_paid=10000)
+        self.assertFalse(p.is_partial)
+        self.assertIsNone(p.balance_due)
+
+    def test_partial_payment_sets_is_partial_and_balance(self):
+        p = self._make_payment(10000)
+        p.mark_success("TX002", amount_paid=7000)
+        self.assertTrue(p.is_partial)
+        self.assertEqual(p.balance_due, Decimal("3000"))
+
+    def test_balance_property_reflects_partial(self):
+        p = self._make_payment(10000)
+        p.mark_success("TX003", amount_paid=4000)
+        self.assertEqual(p.balance, Decimal("6000"))
+
+
+class PayBalanceViewTests(TestCase):
+    """POST /api/payments/pay-balance/<id>/ endpoint."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from payments.models import Payment
+        from tenancies.models import Tenancy
+        from accounts.models import User
+        from properties.models import Property, Unit
+
+        self.client   = APIClient()
+        landlord = User.objects.create_user(phone="0700555666", password="pass", full_name="PBL Landlord", role="landlord")
+        self.tenant   = User.objects.create_user(phone="0700777888", password="pass", full_name="PBL Tenant", role="tenant")
+        prop     = Property.objects.create(landlord=landlord, name="PP", address="AA")
+        unit     = Unit.objects.create(property=prop, unit_number="B1", rent_amount=10000)
+        self.tenancy = Tenancy.objects.create(
+            landlord=landlord, tenant=self.tenant, unit=unit,
+            rent_snapshot=10000, deposit_amount=0,
+            lease_start_date="2024-01-01", status="active",
+        )
+        self.payment = Payment.objects.create(
+            tenancy=self.tenancy, amount_due=10000, amount_paid=7000,
+            payment_type="monthly", method="mpesa", status="success",
+            is_partial=True, balance_due=Decimal("3000"),
+        )
+        self.client.force_authenticate(self.tenant)
+
+    def test_returns_400_when_no_balance(self):
+        self.payment.is_partial = False
+        self.payment.balance_due = None
+        self.payment.save()
+        r = self.client.post(f"/api/payments/pay-balance/{self.payment.id}/", {"payment_method": "mpesa"})
+        self.assertEqual(r.status_code, 400)
+
+    @patch("payments.views.daraja")
+    def test_mpesa_balance_creates_pending_payment(self, mock_daraja):
+        from payments.models import Payment as P
+        mock_daraja.stk_push.return_value = {"CheckoutRequestID": "CHK_BALANCE"}
+        r = self.client.post(
+            f"/api/payments/pay-balance/{self.payment.id}/",
+            {"payment_method": "mpesa", "phone": "0700777888"},
+        )
+        self.assertEqual(r.status_code, 200)
+        bal_payment = P.objects.get(id=r.data["payment_id"])
+        self.assertEqual(bal_payment.payment_type, "balance")
+        self.assertEqual(bal_payment.parent_payment_id, self.payment.id)
+        self.assertEqual(bal_payment.amount_due, Decimal("3000"))
+
+    @patch("payments.views.daraja")
+    def test_card_balance_includes_surcharge(self, mock_daraja):
+        from payments.models import Payment as P
+        mock_daraja.stk_push.return_value = {}
+        with patch("payments.views.paystack") as mock_ps:
+            mock_ps.initiate_payment.return_value = {"data": {"authorization_url": "http://pay.test"}}
+            r = self.client.post(
+                f"/api/payments/pay-balance/{self.payment.id}/",
+                {"payment_method": "card"},
+            )
+        self.assertEqual(r.status_code, 200)
+        bal_payment = P.objects.get(id=r.data["payment_id"])
+        # 2.6% surcharge on 3000 = 78
+        self.assertAlmostEqual(float(bal_payment.card_surcharge_amount), 78.0, places=0)
+
+    @patch("payments.views.daraja")
+    def test_callback_clears_parent_partial_flags(self, mock_daraja):
+        from payments.models import Payment as P
+        mock_daraja.stk_push.return_value = {"CheckoutRequestID": "CHK_CLR"}
+        r = self.client.post(
+            f"/api/payments/pay-balance/{self.payment.id}/",
+            {"payment_method": "mpesa", "phone": "0700777888"},
+        )
+        bal_payment = P.objects.get(id=r.data["payment_id"])
+
+        # Simulate M-Pesa callback marking success
+        callback_payload = {
+            "Body": {"stkCallback": {
+                "MerchantRequestID": "MR1",
+                "CheckoutRequestID": "CHK_CLR",
+                "ResultCode": 0,
+                "ResultDesc": "Success",
+                "CallbackMetadata": {"Item": [
+                    {"Name": "MpesaReceiptNumber", "Value": "PNX12345"},
+                    {"Name": "Amount",             "Value": 3000},
+                    {"Name": "PhoneNumber",        "Value": 254700777888},
+                ]},
+            }}
+        }
+        anon = self.client.__class__()
+        anon.post("/api/payments/mpesa/callback/", callback_payload, format="json")
+
+        self.payment.refresh_from_db()
+        self.assertFalse(self.payment.is_partial)
+        self.assertIsNone(self.payment.balance_due)
+        self.assertIsNotNone(self.payment.balance_paid_at)
